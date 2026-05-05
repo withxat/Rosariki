@@ -12,6 +12,7 @@ import { createDriver } from './driver';
 import { createPipeline } from './pipeline';
 import type { PipelineEvent } from './pipeline';
 import type { RenderParams } from './rendering';
+import { isConfiguredChat, selectStartupReplayChatIds } from './startup';
 import { createTelegramManager } from './telegram';
 import { createAnimationToTextResolver } from './telegram/animation-to-text';
 import { createCustomEmojiToTextResolver, emojiCacheKey } from './telegram/custom-emoji-to-text';
@@ -32,6 +33,7 @@ const main = async () => {
   const backgroundTasksConfig = resolveBackgroundTasks(config);
 
   const chatIds = getChatIds(config);
+  const configuredChatIds = new Set(chatIds);
 
   // Validate runtime config
   if (runtimeConfig.shell.length === 0)
@@ -121,6 +123,8 @@ const main = async () => {
 
   const hasUserbot = config.telegram.apiId != null && config.telegram.apiHash != null;
 
+  const knownChatIds = loadKnownChatIds(db);
+
   const telegram = createTelegramManager({
     botToken: config.telegram.botToken,
     ...(hasUserbot ? {
@@ -128,7 +132,7 @@ const main = async () => {
       apiHash: config.telegram.apiHash,
       session: loadSession(config.telegram.session ?? ''),
     } : {}),
-    initialChatIds: loadKnownChatIds(db),
+    initialChatIds: knownChatIds,
     resolveChatId: messageIds => lookupChatId(db, messageIds),
     imageToText: imageToTextChatIds.size > 0 ? imageToTextResolver : undefined,
     imageToTextChatIds,
@@ -182,7 +186,10 @@ const main = async () => {
   // Cold-start: replay events per chat to rebuild IC + RC.
   // If a compaction cursor exists, only load events from that point onward —
   // older events are summarised and no longer needed for IC or rendering.
-  for (const chatId of loadKnownChatIds(db)) {
+  const replayChatIds = selectStartupReplayChatIds(knownChatIds, chatIds);
+  logger.withFields({ knownSessions: knownChatIds.length, replaySessions: replayChatIds.length }).log('Startup chat selection');
+
+  for (const chatId of replayChatIds) {
     const compaction = loadCompaction(db, chatId);
     if (compaction)
       pipeline.setCompactCursor(chatId, compaction.newCursorMs);
@@ -292,7 +299,8 @@ const main = async () => {
 
     persistEvent(db, event);
     hydrateAltTextFromCache(event);
-    pipeline.pushEvent(chatId, event);
+    if (isConfiguredChat(configuredChatIds, chatId))
+      pipeline.pushEvent(chatId, event);
   };
 
   // Background task manager — created before driver, wired via lazy ref.
@@ -300,7 +308,7 @@ const main = async () => {
   const backgroundTaskManager = createBackgroundTaskManager({
     db,
     persistEvent: event => persistEvent(db, event),
-    pushPipelineEvent: (chatId, event) => pipeline.pushEvent(chatId, event),
+    pushPipelineEvent: (chatId, event) => isConfiguredChat(configuredChatIds, chatId) ? pipeline.pushEvent(chatId, event) : [],
     handleDriverEvent: (chatId, rc) => driverRef.handleEvent?.(chatId, rc),
     taskOutputDir: backgroundTasksConfig.outputDir,
     retentionCount: backgroundTasksConfig.retentionCount,
@@ -411,8 +419,10 @@ const main = async () => {
         }).log('Service event received');
 
         persistEvent(db, event);
-        const rc = pipeline.pushEvent(event.chatId, event);
-        driver.handleEvent(event.chatId, rc);
+        if (isConfiguredChat(configuredChatIds, event.chatId)) {
+          const rc = pipeline.pushEvent(event.chatId, event);
+          driver.handleEvent(event.chatId, rc);
+        }
       }
       return;
     }
@@ -428,12 +438,14 @@ const main = async () => {
 
     const event = adaptMessage(msg);
     persistEvent(db, event);
-    hydrateAltTextFromCache(event);
 
     try { persistMessage(db, msg); } catch (err) { logger.withError(err).error('Failed to persist message'); }
 
-    const rc = pipeline.pushEvent(event.chatId, event);
-    driver.handleEvent(event.chatId, rc);
+    if (isConfiguredChat(configuredChatIds, event.chatId)) {
+      hydrateAltTextFromCache(event);
+      const rc = pipeline.pushEvent(event.chatId, event);
+      driver.handleEvent(event.chatId, rc);
+    }
   });
 
   telegram.onMessageEdit(edit => {
@@ -464,12 +476,14 @@ const main = async () => {
     }
 
     persistEvent(db, event);
-    hydrateAltTextFromCache(event);
 
     try { persistMessageEdit(db, edit); } catch (err) { logger.withError(err).error('Failed to persist message edit'); }
 
-    const rc = pipeline.pushEvent(event.chatId, event);
-    driver.handleEvent(event.chatId, rc);
+    if (isConfiguredChat(configuredChatIds, event.chatId)) {
+      hydrateAltTextFromCache(event);
+      const rc = pipeline.pushEvent(event.chatId, event);
+      driver.handleEvent(event.chatId, rc);
+    }
   });
 
   telegram.onMessageDelete(del => {
@@ -483,8 +497,10 @@ const main = async () => {
 
     try { persistMessageDelete(db, del); } catch (err) { logger.withError(err).error('Failed to persist message delete'); }
 
-    const rc = pipeline.pushEvent(event.chatId, event);
-    driver.handleEvent(event.chatId, rc);
+    if (isConfiguredChat(configuredChatIds, event.chatId)) {
+      const rc = pipeline.pushEvent(event.chatId, event);
+      driver.handleEvent(event.chatId, rc);
+    }
   });
 
   const shutdown = async () => {
