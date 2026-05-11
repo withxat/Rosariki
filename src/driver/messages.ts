@@ -12,11 +12,52 @@ interface AnthropicTool {
   input_schema: Record<string, unknown>;
 }
 
+// Anthropic prompt cache TTL. We pick 1h over 5min for both breakpoints:
+// chat history is append-only and reused across many turns, so 1h's 2× write
+// cost is amortized after ~7 reads, and a single 5min refresh (1.25 + 1.25 =
+// 2.5×) already costs more than one 1h write that survives the gap.
+const CACHE_1H = { type: 'ephemeral' as const, ttl: '1h' as const };
+
+export interface AnthropicCacheTagged {
+  system: { type: 'text'; text: string; cache_control: typeof CACHE_1H }[] | undefined;
+  messages: MessagesMessage[];
+}
+
+// Tag a cache breakpoint on `system` (covers system + tools) and on the last
+// block of the second-to-last message. The last message holds late-binding
+// (primary turns) or the compaction instruction — content that mutates every
+// turn — so we exclude it from the cache prefix.
+//
+// We shallow-clone only what we mutate so the caller's input stays untouched.
+export const applyAnthropicCachePoints = (
+  system: string | undefined,
+  messages: MessagesMessage[],
+): AnthropicCacheTagged => {
+  const taggedSystem = system
+    ? [{ type: 'text' as const, text: system, cache_control: CACHE_1H }]
+    : undefined;
+
+  if (messages.length < 2) return { system: taggedSystem, messages };
+
+  const targetIdx = messages.length - 2;
+  const target = messages[targetIdx]!;
+  if (!Array.isArray(target.content) || target.content.length === 0)
+    return { system: taggedSystem, messages };
+
+  const newContent = [...target.content];
+  const lastIdx = newContent.length - 1;
+  newContent[lastIdx] = { ...newContent[lastIdx]!, cache_control: CACHE_1H };
+
+  const newMessages = [...messages];
+  newMessages[targetIdx] = { ...target, content: newContent } as MessagesMessage;
+  return { system: taggedSystem, messages: newMessages };
+};
+
 export interface MessagesApiParams {
   baseURL: string;
   apiKey: string;
   model: string;
-  system?: string;
+  system?: { type: 'text'; text: string; cache_control?: unknown }[];
   messages: MessagesMessage[];
   tools?: AnthropicTool[];
   maxTokens?: number;
@@ -27,7 +68,12 @@ export interface MessagesApiParams {
 
 export interface MessagesApiResult {
   content: MessagesAssistantContentBlock[];
-  usage: { input_tokens: number; output_tokens: number };
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
   stop_reason: MessagesResponse['stop_reason'];
 }
 
@@ -75,9 +121,25 @@ export const messagesApi = async (params: MessagesApiParams): Promise<MessagesAp
         log.withFields({ label, tool: block.name }).log('tool call');
     }
 
+    if (json.usage.cache_creation_input_tokens || json.usage.cache_read_input_tokens) {
+      log.withFields({
+        label,
+        cacheWrite: json.usage.cache_creation_input_tokens ?? 0,
+        cacheRead: json.usage.cache_read_input_tokens ?? 0,
+        input: json.usage.input_tokens,
+      }).log('cache');
+    }
+
     return {
       content: json.content,
-      usage: { input_tokens: json.usage.input_tokens, output_tokens: json.usage.output_tokens },
+      usage: {
+        input_tokens: json.usage.input_tokens,
+        output_tokens: json.usage.output_tokens,
+        ...(json.usage.cache_creation_input_tokens != null
+          ? { cache_creation_input_tokens: json.usage.cache_creation_input_tokens } : {}),
+        ...(json.usage.cache_read_input_tokens != null
+          ? { cache_read_input_tokens: json.usage.cache_read_input_tokens } : {}),
+      },
       stop_reason: json.stop_reason,
     };
   } finally {

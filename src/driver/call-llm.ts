@@ -5,7 +5,7 @@ import type { Logger } from '@guiiai/logg';
 import { chatCompletions } from './chat';
 import { DUMP_DIR } from './constants';
 import { trimImages } from './context';
-import { messagesApi } from './messages';
+import { applyAnthropicCachePoints, messagesApi } from './messages';
 import { responsesApi } from './responses';
 import type { ProviderFormat } from './types';
 import {
@@ -108,11 +108,12 @@ export const callLlm = async (
     const { system: sysFromEntries, messages } = await toMessagesInput(prepared);
     const effectiveSystem = sysFromEntries ?? system;
     const wireTools = optionalTools(tools?.map(toAnthropicToolSchema));
-    dump(options?.dumpId, 'request', { model: config.model, system: effectiveSystem, messages, tools: wireTools });
+    const tagged = applyAnthropicCachePoints(effectiveSystem, messages);
+    dump(options?.dumpId, 'request', { model: config.model, system: tagged.system, messages: tagged.messages, tools: wireTools });
 
     const response = await messagesApi({
       baseURL: config.apiBaseUrl, apiKey: config.apiKey, model: config.model,
-      system: effectiveSystem, messages, ...(wireTools ? { tools: wireTools } : {}),
+      system: tagged.system, messages: tagged.messages, ...(wireTools ? { tools: wireTools } : {}),
       log: log!, label, timeoutSec: config.timeoutSec,
     });
     dump(options?.dumpId, 'response', response);
