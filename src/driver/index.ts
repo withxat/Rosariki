@@ -308,6 +308,8 @@ export const createDriver = (config: DriverConfig, deps: {
                   entries: probeResult.entries,
                   inputTokens: probeResult.usage.inputTokens,
                   outputTokens: probeResult.usage.outputTokens,
+                  cacheReadTokens: probeResult.usage.cacheReadTokens,
+                  cacheWriteTokens: probeResult.usage.cacheWriteTokens,
                   modelName: chatConfig.probe.model.model,
                   isActivated: hasToolCalls,
                   createdAt: Date.now(),
@@ -339,8 +341,10 @@ export const createDriver = (config: DriverConfig, deps: {
                 await deps.persistTurnResponse(chatId, {
                   requestedAtMs,
                   entries: stepEntries,
-                  inputTokens: usage.prompt_tokens,
-                  outputTokens: usage.completion_tokens,
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  cacheReadTokens: usage.cacheReadTokens,
+                  cacheWriteTokens: usage.cacheWriteTokens,
                   modelName: chatConfig.primaryModel.model,
                 });
                 lastProcessedMs(requestedAtMs);

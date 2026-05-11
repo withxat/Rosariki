@@ -26,7 +26,26 @@ export interface ChatCompletionsParams {
 
 export interface ChatCompletionsResult {
   choices: Array<{ finish_reason: string; message: ChatCompletionsAssistantMessage }>;
-  usage: { prompt_tokens: number; completion_tokens: number };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  };
+}
+
+interface ChatCompletionsRawUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  // OpenAI: nested under prompt_tokens_details.cached_tokens.
+  // DeepSeek (and a few clones): top-level prompt_cache_hit_tokens.
+  prompt_tokens_details?: { cached_tokens?: number };
+  prompt_cache_hit_tokens?: number;
+}
+
+interface ChatCompletionsRawResult {
+  choices: Array<{ finish_reason: string; message: ChatCompletionsAssistantMessage }>;
+  usage: ChatCompletionsRawUsage;
 }
 
 export const chatCompletions = async (params: ChatCompletionsParams): Promise<ChatCompletionsResult> => {
@@ -62,7 +81,7 @@ export const chatCompletions = async (params: ChatCompletionsParams): Promise<Ch
       throw new Error(`Chat Completions API ${res.status}: ${text}`);
     }
 
-    const json = await res.json() as ChatCompletionsResult;
+    const json = await res.json() as ChatCompletionsRawResult;
 
     const choice = json.choices[0];
     if (choice) {
@@ -77,7 +96,22 @@ export const chatCompletions = async (params: ChatCompletionsParams): Promise<Ch
       }
     }
 
-    return json;
+    // OpenAI's prompt_tokens already includes cache hits — cached_tokens is a
+    // subset, not an additional bucket. OpenAI doesn't distinguish cache writes,
+    // so cacheWriteTokens stays 0 on this path.
+    const cacheReadTokens = json.usage.prompt_tokens_details?.cached_tokens
+      ?? json.usage.prompt_cache_hit_tokens
+      ?? 0;
+
+    return {
+      choices: json.choices,
+      usage: {
+        inputTokens: json.usage.prompt_tokens,
+        outputTokens: json.usage.completion_tokens,
+        cacheReadTokens,
+        cacheWriteTokens: 0,
+      },
+    };
   } finally {
     if (timeout) clearTimeout(timeout);
   }

@@ -1,6 +1,6 @@
 import type { Logger } from '@guiiai/logg';
 
-import { callLlm, type LlmCallConfig, type ToolSchema } from './call-llm';
+import { callLlm, type LlmCallConfig, type LlmCallUsage, type ToolSchema } from './call-llm';
 import { ensureDumpDir } from './constants';
 import type { CahciuaTool } from './tools';
 import { executeToolCall, extractToolCalls } from './tools';
@@ -22,7 +22,7 @@ interface StepLoopParams {
   maxImagesAllowed?: number;
   onStepComplete: (
     stepEntries: ConversationEntry[],
-    usage: { prompt_tokens: number; completion_tokens: number },
+    usage: LlmCallUsage,
     requestedAtMs: number,
   ) => void | Promise<void>;
   checkInterrupt: () => boolean;
@@ -42,7 +42,7 @@ export const createRunner = (config: RunnerConfig) => {
     step: number,
   ): Promise<{
     stepEntries: ConversationEntry[];
-    usage: { prompt_tokens: number; completion_tokens: number };
+    usage: LlmCallUsage;
     requestedAtMs: number;
     hasToolCalls: boolean;
   }> => {
@@ -56,10 +56,7 @@ export const createRunner = (config: RunnerConfig) => {
       maxImagesAllowed: params.maxImagesAllowed,
     });
 
-    const usage = {
-      prompt_tokens: result.usage.inputTokens,
-      completion_tokens: result.usage.outputTokens,
-    };
+    const usage = result.usage;
 
     if (result.entries.length === 0)
       return { stepEntries: [], usage, requestedAtMs: stepRequestedAt, hasToolCalls: false };

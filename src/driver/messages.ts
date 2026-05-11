@@ -69,10 +69,10 @@ export interface MessagesApiParams {
 export interface MessagesApiResult {
   content: MessagesAssistantContentBlock[];
   usage: {
-    input_tokens: number;
-    output_tokens: number;
-    cache_creation_input_tokens?: number;
-    cache_read_input_tokens?: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
   };
   stop_reason: MessagesResponse['stop_reason'];
 }
@@ -130,15 +130,19 @@ export const messagesApi = async (params: MessagesApiParams): Promise<MessagesAp
       }).log('cache');
     }
 
+    const cacheReadTokens = json.usage.cache_read_input_tokens ?? 0;
+    const cacheWriteTokens = json.usage.cache_creation_input_tokens ?? 0;
+
     return {
       content: json.content,
       usage: {
-        input_tokens: json.usage.input_tokens,
-        output_tokens: json.usage.output_tokens,
-        ...(json.usage.cache_creation_input_tokens != null
-          ? { cache_creation_input_tokens: json.usage.cache_creation_input_tokens } : {}),
-        ...(json.usage.cache_read_input_tokens != null
-          ? { cache_read_input_tokens: json.usage.cache_read_input_tokens } : {}),
+        // Anthropic's input_tokens is the uncached remainder. Add cache reads
+        // and writes so inputTokens is the full billable input total —
+        // matches OpenAI's prompt_tokens / Responses' input_tokens semantics.
+        inputTokens: json.usage.input_tokens + cacheReadTokens + cacheWriteTokens,
+        outputTokens: json.usage.output_tokens,
+        cacheReadTokens,
+        cacheWriteTokens,
       },
       stop_reason: json.stop_reason,
     };

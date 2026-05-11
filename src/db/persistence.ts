@@ -313,6 +313,8 @@ export const persistTurnResponse = async (db: DB, chatId: string, tr: TurnRespon
     entries: entriesJson,
     inputTokens: tr.inputTokens,
     outputTokens: tr.outputTokens,
+    cacheReadTokens: tr.cacheReadTokens,
+    cacheWriteTokens: tr.cacheWriteTokens,
     modelName: tr.modelName,
   }).run();
 };
@@ -326,6 +328,8 @@ const reconstructTurnResponseV2 = async (row: TurnResponseV2Row): Promise<TurnRe
     entries,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
+    cacheReadTokens: row.cacheReadTokens,
+    cacheWriteTokens: row.cacheWriteTokens,
     modelName: row.modelName,
   };
 };
@@ -352,6 +356,8 @@ export const persistCompaction = (db: DB, chatId: string, meta: CompactionSessio
       summary: meta.summary,
       inputTokens: meta.inputTokens,
       outputTokens: meta.outputTokens,
+      cacheReadTokens: meta.cacheReadTokens,
+      cacheWriteTokens: meta.cacheWriteTokens,
       createdAt: Date.now(),
     })
     .run();
@@ -370,6 +376,8 @@ export const loadCompaction = (db: DB, chatId: string): CompactionSessionMeta | 
     summary: row.summary,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
+    cacheReadTokens: row.cacheReadTokens,
+    cacheWriteTokens: row.cacheWriteTokens,
   };
 };
 
@@ -383,6 +391,8 @@ export const persistProbeResponse = async (db: DB, chatId: string, probe: ProbeR
     entries: entriesJson,
     inputTokens: probe.inputTokens,
     outputTokens: probe.outputTokens,
+    cacheReadTokens: probe.cacheReadTokens,
+    cacheWriteTokens: probe.cacheWriteTokens,
     modelName: probe.modelName,
     isActivated: probe.isActivated,
     createdAt: probe.createdAt,

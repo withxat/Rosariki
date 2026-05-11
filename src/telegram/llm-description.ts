@@ -75,7 +75,7 @@ export const callDescriptionLlm = async (params: {
 
     return {
       text: extractResponsesText(response.output as Array<{ type: string; role?: string; content?: Array<{ type: string; text?: string; refusal?: string }> }>),
-      outputTokens: response.usage.output_tokens,
+      outputTokens: response.usage.outputTokens,
     };
   }
 
@@ -99,6 +99,6 @@ export const callDescriptionLlm = async (params: {
 
   return {
     text: extractChatText(response.choices[0]?.message),
-    outputTokens: response.usage.completion_tokens,
+    outputTokens: response.usage.outputTokens,
   };
 };

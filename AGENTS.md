@@ -280,11 +280,24 @@ TRs are stored in a `turn_responses` DB table (raw provider format, not provider
 | provider | TEXT NOT NULL | `'openai-chat'` or `'responses'` |
 | data | TEXT (JSON) NOT NULL | raw provider response entries (`unknown[]` — openai-chat: `TRDataEntry[]`, responses: output items + function_call_outputs) |
 | session_meta | TEXT (JSON) | deprecated — compaction now uses dedicated `compactions` table |
-| input_tokens | INTEGER NOT NULL | for statistics / cost tracking |
+| input_tokens | INTEGER NOT NULL | total billable input tokens (includes cache reads/writes — see Token Statistics below) |
 | output_tokens | INTEGER NOT NULL | for statistics / cost tracking |
+| cache_read_tokens | INTEGER NOT NULL DEFAULT 0 | subset of input_tokens served from prompt cache (~0.1× cost) |
+| cache_write_tokens | INTEGER NOT NULL DEFAULT 0 | subset of input_tokens written to prompt cache (~1.25–2× cost; Anthropic only — OpenAI/Responses always 0) |
 | reasoning_signature_compat | TEXT DEFAULT '' | provider compat group for reasoning signature validation |
 
 Same-provider reads are zero-conversion. Cross-provider reads use explicit A→B converter functions.
+
+### Token Statistics (`inputTokens` semantics)
+
+Token-usage columns on `turn_responses_v2`, `probe_responses_v2`, and `compactions` are **normalized at the API boundary** in `src/driver/{chat,messages,responses}.ts` so downstream code sees a single shape regardless of provider:
+
+- `inputTokens` — **total** billable input tokens for the call, **including cache reads and writes**. For OpenAI Chat Completions and OpenAI Responses this is just `prompt_tokens` / `input_tokens` as returned (those already include cache hits). For Anthropic Messages the API's `input_tokens` only counts the uncached remainder, so we add `cache_read_input_tokens + cache_creation_input_tokens` back in to keep the meaning consistent across providers.
+- `outputTokens` — completion tokens, unchanged across providers.
+- `cacheReadTokens` — subset of `inputTokens` that hit the prompt cache (~0.1× base input price). Sourced from `prompt_tokens_details.cached_tokens` (OpenAI Chat) / `input_tokens_details.cached_tokens` (Responses) / `cache_read_input_tokens` (Anthropic). DeepSeek's top-level `prompt_cache_hit_tokens` is also accepted on the chat path.
+- `cacheWriteTokens` — subset of `inputTokens` written to cache (~1.25–2× base input price depending on TTL). Anthropic only; OpenAI/Responses don't distinguish writes and always report 0 here.
+
+Cost = `(inputTokens − cacheReadTokens − cacheWriteTokens) × base + cacheReadTokens × ~0.1 + cacheWriteTokens × ~1.25` (Anthropic 5min) or `× ~2` (Anthropic 1h, currently used by `applyAnthropicCachePoints`).
 
 See `docs/dcp-design.md` for detailed design rationale, theoretical model, and provider-specific metadata reference.
 
@@ -345,8 +358,10 @@ Compaction proactively summarizes historical conversation context to prevent LLM
 | old_cursor_ms | INTEGER NOT NULL | start of compacted window |
 | new_cursor_ms | INTEGER NOT NULL | end of compacted window (= new cursor position) |
 | summary | TEXT NOT NULL | structured plain-text summary |
-| input_tokens | INTEGER NOT NULL | LLM input tokens for this compaction call |
+| input_tokens | INTEGER NOT NULL | LLM input tokens for this compaction call (total — see Token Statistics) |
 | output_tokens | INTEGER NOT NULL | LLM output tokens for this compaction call |
+| cache_read_tokens | INTEGER NOT NULL DEFAULT 0 | subset of input_tokens served from prompt cache |
+| cache_write_tokens | INTEGER NOT NULL DEFAULT 0 | subset of input_tokens written to prompt cache (Anthropic only) |
 | created_at | INTEGER NOT NULL | millisecond timestamp |
 
 **Compaction is NOT a turn**: compaction has its own dedicated table, not stored in `turn_responses`. It produces a summary (pure text with structured sections), not a provider-format response.
@@ -390,8 +405,10 @@ In group chats, most messages don't require a bot response. To avoid wasting tok
 | requested_at | INTEGER NOT NULL | millisecond timestamp |
 | provider | TEXT NOT NULL | `'openai-chat'` or `'responses'` |
 | data | TEXT (JSON) NOT NULL | probe LLM output |
-| input_tokens | INTEGER NOT NULL | token stats |
+| input_tokens | INTEGER NOT NULL | total billable input tokens (includes cache reads/writes — see Token Statistics) |
 | output_tokens | INTEGER NOT NULL | token stats |
+| cache_read_tokens | INTEGER NOT NULL DEFAULT 0 | subset of input_tokens served from prompt cache |
+| cache_write_tokens | INTEGER NOT NULL DEFAULT 0 | subset of input_tokens written to prompt cache (Anthropic only) |
 | reasoning_signature_compat | TEXT DEFAULT '' | provider compat group |
 | is_activated | INTEGER NOT NULL DEFAULT 0 | whether probe triggered primary activation |
 | created_at | INTEGER NOT NULL | millisecond timestamp |

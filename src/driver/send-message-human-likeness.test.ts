@@ -14,6 +14,8 @@ const tr = (requestedAtMs: number, entries: ConversationEntry[]): TurnResponseV2
   entries,
   inputTokens: 0,
   outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
   modelName: 'test-model',
 });
 

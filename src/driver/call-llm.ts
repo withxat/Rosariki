@@ -34,9 +34,16 @@ export interface ToolSchema {
   parameters: Record<string, unknown>;
 }
 
+export interface LlmCallUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
 export interface LlmCallResult {
   entries: ConversationEntry[];
-  usage: { inputTokens: number; outputTokens: number };
+  usage: LlmCallUsage;
 }
 
 const dump = (dumpId: string | undefined, suffix: string, body: unknown) => {
@@ -100,7 +107,7 @@ export const callLlm = async (
       item.type === 'message' || item.type === 'function_call' || item.type === 'reasoning');
     return {
       entries: fromResponsesOutput(assistantItems),
-      usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
+      usage: response.usage,
     };
   }
 
@@ -120,7 +127,7 @@ export const callLlm = async (
 
     return {
       entries: fromMessagesOutput(response.content),
-      usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
+      usage: response.usage,
     };
   }
 
@@ -137,10 +144,10 @@ export const callLlm = async (
   dump(options?.dumpId, 'response', response);
 
   const choice = response.choices[0];
-  if (!choice) return { entries: [], usage: { inputTokens: response.usage.prompt_tokens, outputTokens: response.usage.completion_tokens } };
+  if (!choice) return { entries: [], usage: response.usage };
 
   return {
     entries: fromChatCompletionsOutput([choice.message as ChatCompletionsAssistantMessage]),
-    usage: { inputTokens: response.usage.prompt_tokens, outputTokens: response.usage.completion_tokens },
+    usage: response.usage,
   };
 };

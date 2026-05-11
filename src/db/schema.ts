@@ -111,8 +111,14 @@ export const turnResponsesV2 = sqliteTable('turn_responses_v2', {
   chatId: text('chat_id').notNull(),
   requestedAt: integer('requested_at').notNull(),
   entries: text('entries').notNull(),
+  // inputTokens / outputTokens are TOTALS as billed — for Anthropic this means
+  // we add cache_creation_input_tokens + cache_read_input_tokens to the API's
+  // input_tokens (which only counts uncached input). cacheRead/cacheWriteTokens
+  // are the cache-hit / cache-write components inside inputTokens.
   inputTokens: integer('input_tokens').notNull(),
   outputTokens: integer('output_tokens').notNull(),
+  cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+  cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
   modelName: text('model_name').notNull().default(''),
 }, table => [
   index('turn_responses_v2_chat_requested_idx').on(table.chatId, table.requestedAt),
@@ -125,6 +131,8 @@ export const probeResponsesV2 = sqliteTable('probe_responses_v2', {
   entries: text('entries').notNull(),
   inputTokens: integer('input_tokens').notNull(),
   outputTokens: integer('output_tokens').notNull(),
+  cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+  cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
   modelName: text('model_name').notNull().default(''),
   isActivated: integer('is_activated', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at').notNull(),
@@ -140,6 +148,8 @@ export const compactions = sqliteTable('compactions', {
   summary: text('summary').notNull(),
   inputTokens: integer('input_tokens').notNull().default(0),
   outputTokens: integer('output_tokens').notNull().default(0),
+  cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+  cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
   createdAt: integer('created_at').notNull(),
 }, table => [
   index('compactions_chat_id_idx').on(table.chatId),

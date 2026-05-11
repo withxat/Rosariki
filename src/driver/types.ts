@@ -8,6 +8,8 @@ export interface TurnResponseV2 {
   entries: ConversationEntry[];
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   modelName: string;
 }
 
@@ -16,6 +18,8 @@ export interface ProbeResponseV2 {
   entries: ConversationEntry[];
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   modelName: string;
   isActivated: boolean;
   createdAt: number;
@@ -47,6 +51,8 @@ export interface CompactionSessionMeta {
   summary: string;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
 }
 
 export type { ResolvedChatConfig } from '../config/config';

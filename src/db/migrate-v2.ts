@@ -54,6 +54,8 @@ export const migrateV1ToV2 = async (db: DB, logger: Logger): Promise<void> => {
     entries: await codec.stringify(migrateRowEntries(row.provider, row.data)),
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     modelName: '',
   })));
 
@@ -63,6 +65,8 @@ export const migrateV1ToV2 = async (db: DB, logger: Logger): Promise<void> => {
     entries: await codec.stringify(migrateRowEntries(row.provider, row.data)),
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     modelName: '',
     isActivated: row.isActivated,
     createdAt: row.createdAt,

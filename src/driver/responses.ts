@@ -21,7 +21,12 @@ export interface ResponsesApiParams {
 
 export interface ResponsesApiResult {
   output: ResponseOutputItem[];
-  usage: { input_tokens: number; output_tokens: number };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  };
   status: string;
 }
 
@@ -73,8 +78,12 @@ export const responsesApi = async (params: ResponsesApiParams): Promise<Response
     return {
       output: json.output,
       usage: {
-        input_tokens: json.usage?.input_tokens ?? 0,
-        output_tokens: json.usage?.output_tokens ?? 0,
+        // Responses' input_tokens already includes cache hits; cached_tokens
+        // is a breakdown, not an additional bucket. No separate write counter.
+        inputTokens: json.usage?.input_tokens ?? 0,
+        outputTokens: json.usage?.output_tokens ?? 0,
+        cacheReadTokens: json.usage?.input_tokens_details?.cached_tokens ?? 0,
+        cacheWriteTokens: 0,
       },
       status: json.status,
     };

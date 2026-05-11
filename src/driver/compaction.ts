@@ -56,6 +56,8 @@ export const runCompaction = async (params: CompactionParams): Promise<Compactio
   let summary = '';
   let inputTokens = 0;
   let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const result = await callLlm(params, entries, compactSystemPrompt, undefined, {
@@ -67,6 +69,8 @@ export const runCompaction = async (params: CompactionParams): Promise<Compactio
     summary = extractAssistantText(result.entries);
     inputTokens = result.usage.inputTokens;
     outputTokens = result.usage.outputTokens;
+    cacheReadTokens = result.usage.cacheReadTokens;
+    cacheWriteTokens = result.usage.cacheWriteTokens;
     if (summary) break;
     params.log.withFields({ chatId: params.chatId, attempt, maxRetries: MAX_RETRIES })
       .warn('Compaction LLM returned empty content, retrying');
@@ -75,5 +79,13 @@ export const runCompaction = async (params: CompactionParams): Promise<Compactio
   if (!summary)
     throw new Error('compaction produced empty summary');
 
-  return { oldCursorMs: params.oldCursorMs, newCursorMs: params.newCursorMs, summary, inputTokens, outputTokens };
+  return {
+    oldCursorMs: params.oldCursorMs,
+    newCursorMs: params.newCursorMs,
+    summary,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+  };
 };
