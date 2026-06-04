@@ -278,6 +278,7 @@ export const createDriver = (config: DriverConfig, deps: {
 
             const lateBindingParams = {
               timeNow: localTimeNow(),
+              currentChannel: chatConfig.platform,
               isMentioned, isReplied,
               recentSendMessageHumanLikenessXml,
               isInterrupted,

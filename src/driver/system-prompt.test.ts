@@ -96,6 +96,14 @@ describe('primary-system.velin.md', () => {
     expect(rendered).toContain('does not have a public message-link form');
     expect(rendered).not.toContain('https://t.me/c/');
   });
+
+  it('renders Slack interaction style guidance', async () => {
+    const rendered = await renderSystem({ modelName: 'gpt-4o', chatId: 'C01234567', currentChannel: 'slack' });
+    expect(rendered).toContain('Slack Interaction Style');
+    expect(rendered).toContain('Use `react_to_message` for lightweight acknowledgement');
+    expect(rendered).toContain('set `reply_to` on `send_message`');
+    expect(rendered).toContain('A simple Slack reaction does not need a companion message');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -115,6 +123,18 @@ describe('primary-late-binding.velin.md', () => {
     expect(rendered).not.toContain('<human-likeness');
     expect(rendered).not.toContain('interrupted');
     assertNoVueSyntaxLeak(rendered);
+  });
+
+  it('renders Slack behavior nudges', async () => {
+    const rendered = await renderLateBinding({
+      timeNow: '2025-01-01T00:00:00Z',
+      currentChannel: 'slack',
+      isMentioned: true,
+    });
+    expect(rendered).toContain('Slack behavior preference');
+    expect(rendered).toContain('react_to_message');
+    expect(rendered).toContain('reply_to');
+    expect(rendered).toContain('reaction may be the whole response');
   });
 
   it('renders activated state', async () => {
