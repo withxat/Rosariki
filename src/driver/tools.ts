@@ -4,6 +4,7 @@ import { Validator } from '@cfworker/json-schema';
 import type { Logger } from '@guiiai/logg';
 import sharp from 'sharp';
 
+import type { CanonicalAttachment } from '../adaptation/types';
 import type { RuntimeConfig } from '../config/config';
 import type { Attachment } from '../telegram/message/types';
 import type {
@@ -122,6 +123,84 @@ export const createSendMessageTool = (
     },
   });
 };
+
+export interface ChatInteractionDeps {
+  reactToMessage: (messageId: string, reaction: string, operation: 'add' | 'remove') => Promise<void>;
+  updateMessage: (messageId: string, text: string) => Promise<{ messageId: string }>;
+  deleteMessage: (messageId: string) => Promise<void>;
+  readThread: (messageId: string, limit?: number) => Promise<unknown>;
+}
+
+export const createChatInteractionTools = (deps: ChatInteractionDeps): CahciuaTool[] => [
+  createTool({
+    name: 'react_to_message',
+    description: 'Add or remove a reaction on a Slack message.',
+    parameters: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'string', description: 'The Slack message id / timestamp to react to.' },
+        reaction: { type: 'string', description: 'Reaction emoji name, with or without surrounding colons.' },
+        operation: { type: 'string', enum: ['add', 'remove'], description: 'Whether to add or remove the reaction.' },
+      },
+      required: ['message_id', 'reaction', 'operation'],
+    },
+    execute: async input => {
+      const { message_id, reaction, operation } = input as { message_id: string; reaction: string; operation: 'add' | 'remove' };
+      await deps.reactToMessage(message_id, reaction, operation);
+      return { content: JSON.stringify({ ok: true }), requiresFollowUp: true };
+    },
+  }),
+  createTool({
+    name: 'update_message',
+    description: 'Update a Slack message previously sent by the bot.',
+    parameters: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'string', description: 'The Slack message id / timestamp to update.' },
+        text: { type: 'string', description: 'Replacement message text.' },
+      },
+      required: ['message_id', 'text'],
+    },
+    execute: async input => {
+      const { message_id, text } = input as { message_id: string; text: string };
+      const result = await deps.updateMessage(message_id, text);
+      return { content: JSON.stringify({ ok: true, message_id: result.messageId }), requiresFollowUp: true };
+    },
+  }),
+  createTool({
+    name: 'delete_message',
+    description: 'Delete a Slack message previously sent by the bot.',
+    parameters: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'string', description: 'The Slack message id / timestamp to delete.' },
+      },
+      required: ['message_id'],
+    },
+    execute: async input => {
+      const { message_id } = input as { message_id: string };
+      await deps.deleteMessage(message_id);
+      return { content: JSON.stringify({ ok: true }), requiresFollowUp: true };
+    },
+  }),
+  createTool({
+    name: 'read_thread',
+    description: 'Read replies in a Slack thread.',
+    parameters: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'string', description: 'The root Slack message id / timestamp of the thread.' },
+        limit: { type: 'number', description: 'Maximum replies to return, from 1 to 100. Defaults to 20.' },
+      },
+      required: ['message_id'],
+    },
+    execute: async input => {
+      const { message_id, limit } = input as { message_id: string; limit?: number };
+      const replies = await deps.readThread(message_id, limit);
+      return { content: JSON.stringify({ ok: true, replies }), requiresFollowUp: true };
+    },
+  }),
+];
 
 const BASH_MAX_OUTPUT = 4096;
 const BASH_TIMEOUT_MS = 30_000;
@@ -243,18 +322,20 @@ const DOWNLOAD_TIMEOUT_MS = 60_000;
 /** Shared file_id → Buffer logic used by download_file and read_image tools. */
 export const createAttachmentDownloader = (deps: {
   chatId: string;
-  loadMessageAttachments: (chatId: string, messageId: number) => Attachment[] | undefined;
+  loadMessageAttachments: (chatId: string, messageId: string) => (Attachment | CanonicalAttachment)[] | undefined;
   downloadFile: (fileId: string) => Promise<Buffer>;
+  downloadPlatformFile?: (platformFileId: string) => Promise<Buffer | undefined>;
   downloadMessageMedia?: (chatId: string, messageId: number) => Promise<Buffer | undefined>;
 }): (fileId: string) => Promise<Buffer> =>
   async (fileId: string): Promise<Buffer> => {
     const colonIdx = fileId.lastIndexOf(':');
     if (colonIdx < 0) throw new Error('Invalid file_id format. Expected "messageId:index".');
 
-    const messageId = parseInt(fileId.slice(0, colonIdx), 10);
+    const messageId = fileId.slice(0, colonIdx);
+    const numericMessageId = parseInt(messageId, 10);
     const attachmentIndex = parseInt(fileId.slice(colonIdx + 1), 10);
-    if (isNaN(messageId) || isNaN(attachmentIndex) || attachmentIndex < 0)
-      throw new Error('Invalid file_id: messageId or index is not a valid number.');
+    if (isNaN(attachmentIndex) || attachmentIndex < 0)
+      throw new Error('Invalid file_id: attachment index is not a valid number.');
 
     const attachments = deps.loadMessageAttachments(deps.chatId, messageId);
     if (!attachments || attachments.length === 0)
@@ -265,13 +346,16 @@ export const createAttachmentDownloader = (deps: {
     const att = attachments[attachmentIndex]!;
 
     let buffer: Buffer | undefined;
-    if (att.fileId) {
+    if ('platformFileId' in att && att.platformFileId && deps.downloadPlatformFile) {
+      try { buffer = await deps.downloadPlatformFile(att.platformFileId); } catch { /* fall through */ }
+    }
+    if (!buffer && 'fileId' in att && att.fileId) {
       try { buffer = await deps.downloadFile(att.fileId); } catch { /* fall through to userbot */ }
     }
-    if (!buffer && deps.downloadMessageMedia)
-      buffer = await deps.downloadMessageMedia(deps.chatId, messageId);
+    if (!buffer && deps.downloadMessageMedia && !isNaN(numericMessageId))
+      buffer = await deps.downloadMessageMedia(deps.chatId, numericMessageId);
     if (!buffer)
-      throw new Error('Failed to download file from Telegram.');
+      throw new Error('Failed to download file from chat platform.');
 
     return buffer;
   };

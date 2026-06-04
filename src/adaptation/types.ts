@@ -7,6 +7,7 @@ export interface CanonicalUser {
 
 export interface CanonicalAttachment {
   type: 'photo' | 'sticker' | 'animation' | 'video' | 'video_note' | 'audio' | 'voice' | 'document';
+  platformFileId?: string;
   mimeType?: string;
   fileName?: string;
   width?: number;
@@ -88,6 +89,7 @@ export interface ServiceActionChatRenamed { action: 'chat_renamed'; newTitle: st
 export interface ServiceActionChatPhotoChanged { action: 'chat_photo_changed' }
 export interface ServiceActionChatPhotoDeleted { action: 'chat_photo_deleted' }
 export interface ServiceActionMessagePinned { action: 'message_pinned'; messageId: string }
+export interface ServiceActionMessageReaction { action: 'message_reaction'; messageId: string; reaction: string; operation: 'added' | 'removed' }
 
 export type ServiceAction =
   | ServiceActionMembersJoined
@@ -95,7 +97,8 @@ export type ServiceAction =
   | ServiceActionChatRenamed
   | ServiceActionChatPhotoChanged
   | ServiceActionChatPhotoDeleted
-  | ServiceActionMessagePinned;
+  | ServiceActionMessagePinned
+  | ServiceActionMessageReaction;
 
 export interface CanonicalServiceEvent {
   type: 'service';

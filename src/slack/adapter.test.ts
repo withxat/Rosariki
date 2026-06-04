@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { adaptSlackDelete, adaptSlackEdit, adaptSlackMessage, parseSlackContent } from './adapter';
+import { adaptSlackDelete, adaptSlackEdit, adaptSlackMessage, adaptSlackReaction, parseSlackContent } from './adapter';
 
 describe('Slack adapter', () => {
   it('parses Slack user mentions as canonical mention nodes', () => {
@@ -50,6 +50,7 @@ describe('Slack adapter', () => {
     expect(msg.attachments).toEqual([
       {
         type: 'photo',
+        platformFileId: 'F1',
         mimeType: 'image/png',
         fileName: 'photo.png',
         width: 800,
@@ -58,6 +59,7 @@ describe('Slack adapter', () => {
       },
       {
         type: 'document',
+        platformFileId: 'F2',
         mimeType: 'application/pdf',
         fileName: 'report.pdf',
       },
@@ -95,7 +97,7 @@ describe('Slack adapter', () => {
     });
     expect(edit.messageId).toBe('1710000000.123456');
     expect(edit.timestampSec).toBe(1710000005);
-    expect(edit.attachments).toEqual([{ type: 'video', mimeType: 'video/mp4', fileName: 'clip.mp4', duration: 3 }]);
+    expect(edit.attachments).toEqual([{ type: 'video', platformFileId: 'F3', mimeType: 'video/mp4', fileName: 'clip.mp4', duration: 3 }]);
 
     const del = adaptSlackDelete({
       chatId: 'C123',
@@ -104,5 +106,29 @@ describe('Slack adapter', () => {
       utcOffsetMin: 480,
     });
     expect(del.messageIds).toEqual(['1710000000.123456']);
+  });
+
+  it('adapts Slack reactions as service events', () => {
+    const event = adaptSlackReaction({
+      chatId: 'C123',
+      messageId: '1710000000.123456',
+      reaction: 'eyes',
+      operation: 'added',
+      sender: { id: 'U1', displayName: 'Alice', username: 'alice', isBot: false },
+      receivedAtMs: 1710000007123,
+      utcOffsetMin: 480,
+    });
+
+    expect(event).toMatchObject({
+      type: 'service',
+      chatId: 'C123',
+      actor: { id: 'U1', displayName: 'Alice', username: 'alice', isBot: false },
+      action: {
+        action: 'message_reaction',
+        messageId: '1710000000.123456',
+        reaction: 'eyes',
+        operation: 'added',
+      },
+    });
   });
 });

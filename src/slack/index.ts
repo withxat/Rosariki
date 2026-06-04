@@ -3,7 +3,7 @@ import { App, LogLevel } from '@slack/bolt';
 import type { WebClient } from '@slack/web-api';
 
 import { registerHttpSecret } from '../http';
-import type { SlackFileAttachment, SlackMessage, SlackMessageDelete, SlackMessageEdit, SlackSentMessage, SlackUser } from './types';
+import type { SlackFileAttachment, SlackMessage, SlackMessageDelete, SlackMessageEdit, SlackReactionEvent, SlackSentMessage, SlackThreadReply, SlackUser } from './types';
 import { createEventBus } from '../telegram/event-bus';
 import type { ImageToTextResolver } from '../telegram/image-to-text';
 import { generateThumbnail } from '../telegram/thumbnail';
@@ -30,8 +30,15 @@ export interface SlackManager {
   onMessage: (handler: (msg: SlackMessage) => void) => void;
   onMessageEdit: (handler: (edit: SlackMessageEdit) => void) => void;
   onMessageDelete: (handler: (del: SlackMessageDelete) => void) => void;
+  onReaction: (handler: (reaction: SlackReactionEvent) => void) => void;
   sendMessage(channel: string, text: string, threadTs?: string): Promise<SlackSentMessage>;
   uploadFiles(channel: string, files: SlackUploadItem[], initialComment?: string, threadTs?: string): Promise<SlackSentMessage>;
+  addReaction(channel: string, messageTs: string, reaction: string): Promise<void>;
+  removeReaction(channel: string, messageTs: string, reaction: string): Promise<void>;
+  updateMessage(channel: string, messageTs: string, text: string): Promise<SlackSentMessage>;
+  deleteMessage(channel: string, messageTs: string): Promise<void>;
+  readThread(channel: string, threadTs: string, limit?: number): Promise<SlackThreadReply[]>;
+  downloadFileById(fileId: string): Promise<Buffer | undefined>;
   botUserId(): string | undefined;
   client: WebClient;
 }
@@ -66,6 +73,7 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
   const messageBus = createEventBus<SlackMessage>('slack:message', logger);
   const editBus = createEventBus<SlackMessageEdit>('slack:edit', logger);
   const deleteBus = createEventBus<SlackMessageDelete>('slack:delete', logger);
+  const reactionBus = createEventBus<SlackReactionEvent>('slack:reaction', logger);
   const userCache = new Map<string, SlackUser>();
   const seenMessages: string[] = [];
   const seenMessageSet = new Set<string>();
@@ -96,6 +104,12 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
     });
     if (!res.ok) throw new Error(`Slack file download failed (${res.status} ${res.statusText})`);
     return Buffer.from(await res.arrayBuffer());
+  };
+
+  const downloadFileById = async (fileId: string): Promise<Buffer | undefined> => {
+    const info = await app.client.files.info({ file: fileId });
+    const file = toFileAttachment(info.file);
+    return file ? await downloadFile(file) : undefined;
   };
 
   const hydrateFiles = async (chatId: string, text: string, files?: SlackFileAttachment[]) => {
@@ -235,6 +249,42 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
     }
   });
 
+  app.event('reaction_added', async ({ event }) => {
+    const reactionEvent = event as any;
+    try {
+      const item = reactionEvent.item;
+      if (item?.type !== 'message' || !item.channel || !item.ts) return;
+      reactionBus.emit({
+        chatId: item.channel,
+        messageId: item.ts,
+        sender: await loadUser(reactionEvent.user, reactionEvent.team),
+        reaction: reactionEvent.reaction,
+        operation: 'added',
+        ...captureIngressMeta(),
+      });
+    } catch (err) {
+      log.withError(err).error('Failed to handle Slack reaction_added event');
+    }
+  });
+
+  app.event('reaction_removed', async ({ event }) => {
+    const reactionEvent = event as any;
+    try {
+      const item = reactionEvent.item;
+      if (item?.type !== 'message' || !item.channel || !item.ts) return;
+      reactionBus.emit({
+        chatId: item.channel,
+        messageId: item.ts,
+        sender: await loadUser(reactionEvent.user, reactionEvent.team),
+        reaction: reactionEvent.reaction,
+        operation: 'removed',
+        ...captureIngressMeta(),
+      });
+    } catch (err) {
+      log.withError(err).error('Failed to handle Slack reaction_removed event');
+    }
+  });
+
   app.error(async err => {
     log.withError(err).error('Slack app error');
   });
@@ -304,6 +354,50 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
     };
   };
 
+  const normalizeReactionName = (reaction: string): string =>
+    reaction.replace(/^:|:$/g, '');
+
+  const addReaction = async (channel: string, messageTs: string, reaction: string): Promise<void> => {
+    await app.client.reactions.add({ channel, timestamp: messageTs, name: normalizeReactionName(reaction) });
+  };
+
+  const removeReaction = async (channel: string, messageTs: string, reaction: string): Promise<void> => {
+    await app.client.reactions.remove({ channel, timestamp: messageTs, name: normalizeReactionName(reaction) });
+  };
+
+  const updateMessage = async (channel: string, messageTs: string, text: string): Promise<SlackSentMessage> => {
+    const updated = await app.client.chat.update({
+      channel,
+      ts: messageTs,
+      text,
+    });
+    const ts = updated.ts ?? messageTs;
+    return {
+      messageId: ts,
+      date: slackTsToSec(ts),
+      text: updated.message?.text ?? text,
+    };
+  };
+
+  const deleteMessage = async (channel: string, messageTs: string): Promise<void> => {
+    await app.client.chat.delete({ channel, ts: messageTs });
+  };
+
+  const readThread = async (channel: string, threadTs: string, limit = 20): Promise<SlackThreadReply[]> => {
+    const result = await app.client.conversations.replies({
+      channel,
+      ts: threadTs,
+      limit: Math.min(Math.max(limit, 1), 100),
+    });
+    const messages = result.messages ?? [];
+    return await Promise.all(messages.map(async msg => ({
+      messageId: msg.ts ?? '',
+      sender: await loadUser(msg.user, msg.team),
+      text: msg.text ?? '',
+      date: msg.ts ? slackTsToSec(msg.ts) : 0,
+    })));
+  };
+
   return {
     init,
     start,
@@ -311,11 +405,18 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
     onMessage: messageBus.on,
     onMessageEdit: editBus.on,
     onMessageDelete: deleteBus.on,
+    onReaction: reactionBus.on,
     sendMessage,
     uploadFiles,
+    addReaction,
+    removeReaction,
+    updateMessage,
+    deleteMessage,
+    readThread,
+    downloadFileById,
     botUserId: () => botUserId,
     client: app.client,
   };
 };
 
-export type { SlackMessage, SlackMessageDelete, SlackMessageEdit, SlackSentMessage };
+export type { SlackMessage, SlackMessageDelete, SlackMessageEdit, SlackReactionEvent, SlackSentMessage, SlackThreadReply };

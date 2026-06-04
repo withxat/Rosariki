@@ -37,6 +37,14 @@ const toolListBlock = computed(() => {
     '`kill_task` — Kill a running background task by its ID.',
     '`read_task_output` — Read the full output of a completed background task. Supports line-based pagination (offset, limit).',
   ]
+  if (props.currentChannel === 'slack') {
+    lines.push(
+      '`react_to_message` — Add or remove a reaction on a Slack message.',
+      '`update_message` — Update a Slack message previously sent by you.',
+      '`delete_message` — Delete a Slack message previously sent by you.',
+      '`read_thread` — Read replies in a Slack thread.',
+    )
+  }
   return 'Your available tools are:' + NL + NL + lines.map(l => '- ' + l).join(NL)
 })
 </script>
@@ -162,6 +170,8 @@ Call `send_message` to send a message in the current conversation:
 - `await_response` (optional): Set to `true` when you intend to perform additional actions after this message (e.g., send another message, use another tool). Defaults to `false`.
 
 To stay silent, simply do not call `send_message`. Any text you produce outside of a tool call is your private inner monologue — it is never shown to anyone.
+
+For Slack chats, you can also use `react_to_message`, `update_message`, `delete_message`, and `read_thread` when those actions are more appropriate than sending another message.
 
 ### Sending Attachments
 

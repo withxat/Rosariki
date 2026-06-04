@@ -21,7 +21,7 @@ See `docs/dcp-design.md` for architecture rationale.
 
 ## Tech Stack
 
-Node ≥22, TypeScript, pnpm. Telegram: grammY (Bot API) + gramjs (MTProto). Slack: @slack/bolt + @slack/web-api (Socket Mode; mrkdwn parsing; private file download + blocking image-to-text on inbound image attachments). DB: better-sqlite3 + Drizzle. State: Immer. Reactivity: alien-signals. Validation: Valibot. Prompts: `@velin-dev/core` (all in `prompts/*.velin.md` — never hardcode prompt strings). Logging: `@guiiai/logg`. Tests: Vitest. Media: sharp, ffmpeg-static + ffprobe-static; optional `lottie-frame` for TGS (pnpm optional dep; system `libpng-dev` + `librlottie-dev` when building TGS support).
+Node ≥22, TypeScript, pnpm. Telegram: grammY (Bot API) + gramjs (MTProto). Slack: @slack/bolt + @slack/web-api (Socket Mode; mrkdwn; inbound image hydration; reaction ingress; interaction tools: react/edit/delete/read_thread). DB: better-sqlite3 + Drizzle. State: Immer. Reactivity: alien-signals. Validation: Valibot. Prompts: `@velin-dev/core` (all in `prompts/*.velin.md` — never hardcode prompt strings). Logging: `@guiiai/logg`. Tests: Vitest. Media: sharp, ffmpeg-static + ffprobe-static; optional `lottie-frame` for TGS (pnpm optional dep; system `libpng-dev` + `librlottie-dev` when building TGS support).
 
 ## Commands
 
@@ -37,7 +37,7 @@ src/
 ├── driver/       LLM orchestration, tool loop, compaction, probe gate, format conversion.
 ├── db/           Drizzle schema + persistence. Schema is the source of truth.
 ├── telegram/     Bot+userbot, ingress queue, media-to-text transforms, frame extraction.
-├── slack/        Socket Mode ingress, mrkdwn/file adapter, inbound image hydration, outbound messages/files.
+├── slack/        Socket Mode ingress, reactions, mrkdwn/file adapter, inbound image hydration, interaction tools, outbound messages/files.
 ├── config/       YAML loader (Valibot).
 ├── http.ts       fetch wrapper with credential redaction (registerHttpSecret).
 ├── pipeline.ts   Per-chat IC/RC state manager.

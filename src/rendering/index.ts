@@ -205,6 +205,9 @@ const renderSystemEvent = (event: ICSystemEvent, contactNames?: Map<string, stri
     return `<event type="message_pinned" t="${t}"${actorAttr} message_id="${escapeXml(event.messageId)}"/>`;
   }
 
+  case 'message_reaction':
+    return `<event type="message_reaction" t="${t}"${actorAttr} message_id="${escapeXml(event.messageId)}" reaction="${escapeXml(event.reaction)}" operation="${event.operation}"/>`;
+
   default: {
     event satisfies never;
     return '';

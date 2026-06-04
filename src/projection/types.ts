@@ -91,6 +91,18 @@ export interface ICMessagePinnedEvent {
   preview?: string;
 }
 
+export interface ICMessageReactionEvent {
+  type: 'system_event';
+  kind: 'message_reaction';
+  receivedAtMs: number;
+  timestampSec: number;
+  utcOffsetMin: number;
+  actor?: CanonicalUser;
+  messageId: string;
+  reaction: string;
+  operation: 'added' | 'removed';
+}
+
 export type ICSystemEvent =
   | ICUserRenamedEvent
   | ICMembersJoinedEvent
@@ -98,7 +110,8 @@ export type ICSystemEvent =
   | ICChatRenamedEvent
   | ICChatPhotoChangedEvent
   | ICChatPhotoDeletedEvent
-  | ICMessagePinnedEvent;
+  | ICMessagePinnedEvent
+  | ICMessageReactionEvent;
 
 export interface ICRuntimeEvent {
   type: 'runtime_event';

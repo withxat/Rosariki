@@ -7,8 +7,8 @@ import { composeContext, findWorkingWindowCursor, injectLateBindingPrompt, lates
 import { renderLateBindingPrompt, renderSystemPrompt } from './prompt';
 import { createRunner } from './runner';
 import { collectRecentSendMessageAssessments, renderRecentSendMessageHumanLikenessXml } from './send-message-human-likeness';
-import { createBashTool, createAttachmentDownloader, createDownloadFileTool, createKillTaskTool, createReadImageTool, createReadTaskOutputTool, createSendMessageTool, createWebSearchTool } from './tools';
-import type { CahciuaTool, SendMessageAttachment } from './tools';
+import { createBashTool, createAttachmentDownloader, createChatInteractionTools, createDownloadFileTool, createKillTaskTool, createReadImageTool, createReadTaskOutputTool, createSendMessageTool, createWebSearchTool } from './tools';
+import type { CahciuaTool, ChatInteractionDeps, SendMessageAttachment } from './tools';
 import type { CompactionSessionMeta, DriverConfig, LlmEndpoint, ProbeResponseV2, ProviderFormat, TurnResponseV2 } from './types';
 import type { ActiveTaskInfo } from '../background-task/types';
 import type { RuntimeConfig } from '../config/config';
@@ -46,14 +46,16 @@ export const createDriver = (config: DriverConfig, deps: {
   persistTurnResponse: (chatId: string, tr: TurnResponseV2) => Promise<void>;
   persistProbeResponse: (chatId: string, probe: ProbeResponseV2) => Promise<void>;
   sendMessage: (chatId: string, text: string, replyToMessageId?: string, attachments?: SendMessageAttachment[]) => Promise<{ messageId: string | number; date: number }>;
+  chatInteractions?: (chatId: string) => ChatInteractionDeps | undefined;
   loadCompaction: (chatId: string) => CompactionSessionMeta | null;
   loadLastProbeTime: (chatId: string) => number;
   persistCompaction: (chatId: string, meta: CompactionSessionMeta) => void;
   setCompactCursor: (chatId: string, cursorMs: number) => RenderedContext | undefined;
   getChatTitle: (chatId: string) => string | undefined;
   runtimeConfig: RuntimeConfig;
-  loadMessageAttachments: (chatId: string, messageId: number) => Attachment[] | undefined;
+  loadMessageAttachments: (chatId: string, messageId: string) => Attachment[] | undefined;
   downloadFile: (fileId: string) => Promise<Buffer>;
+  downloadPlatformFile?: (platformFileId: string) => Promise<Buffer | undefined>;
   downloadMessageMedia?: (chatId: string, messageId: number) => Promise<Buffer | undefined>;
   resolveModel: (name: string) => LlmEndpoint;
   backgroundTask: {
@@ -192,10 +194,14 @@ export const createDriver = (config: DriverConfig, deps: {
               chatId,
               loadMessageAttachments: deps.loadMessageAttachments,
               downloadFile: deps.downloadFile,
+              downloadPlatformFile: deps.downloadPlatformFile,
               downloadMessageMedia: deps.downloadMessageMedia,
             });
 
             const tools: CahciuaTool[] = [sendMessageTool];
+            const chatInteractions = deps.chatInteractions?.(chatId);
+            if (chatInteractions)
+              tools.push(...createChatInteractionTools(chatInteractions));
             tools.push(createBashTool(deps.runtimeConfig, {
               startTask: deps.backgroundTask.startTask,
               sessionId: chatId,
@@ -253,7 +259,7 @@ export const createDriver = (config: DriverConfig, deps: {
             tools.push(createReadTaskOutputTool((taskId, offset, limit) => deps.backgroundTask.readTaskOutput(taskId, offset, limit)));
 
             const system = await renderSystemPrompt({
-              currentChannel: 'telegram',
+              currentChannel: chatConfig.platform,
               modelName: chatConfig.primaryModel.model,
               chatId,
               chatTitle: deps.getChatTitle(chatId),

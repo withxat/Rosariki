@@ -50,8 +50,25 @@ export interface SlackMessageDelete {
   utcOffsetMin?: number;
 }
 
+export interface SlackReactionEvent {
+  messageId: string;
+  chatId: string;
+  sender?: SlackUser;
+  reaction: string;
+  operation: 'added' | 'removed';
+  receivedAtMs?: number;
+  utcOffsetMin?: number;
+}
+
 export interface SlackSentMessage {
   messageId: string;
   date: number;
   text: string;
+}
+
+export interface SlackThreadReply {
+  messageId: string;
+  sender?: SlackUser;
+  text: string;
+  date: number;
 }

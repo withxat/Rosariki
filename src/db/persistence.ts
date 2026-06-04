@@ -479,10 +479,21 @@ export const loadMessageFileId = (db: DB, chatId: string, messageId: number): st
 };
 
 /** Load all attachments for a message (used by download_file tool). */
-export const loadMessageAttachments = (db: DB, chatId: string, messageId: number): Attachment[] | undefined => {
+export const loadMessageAttachments = (db: DB, chatId: string, messageId: string): (Attachment | CanonicalAttachment)[] | undefined => {
+  const numericMessageId = Number(messageId);
+  if (Number.isInteger(numericMessageId)) {
+    const row = db.select({ attachments: messages.attachments })
+      .from(messages)
+      .where(and(eq(messages.chatId, chatId), eq(messages.messageId, numericMessageId)))
+      .limit(1)
+      .get();
+    if (row?.attachments) return row.attachments;
+  }
+
   const row = db.select({ attachments: messages.attachments })
-    .from(messages)
-    .where(and(eq(messages.chatId, chatId), eq(messages.messageId, messageId)))
+    .from(events)
+    .where(and(eq(events.chatId, chatId), eq(events.messageId, messageId)))
+    .orderBy(desc(events.id))
     .limit(1)
     .get();
   return row?.attachments ?? undefined;

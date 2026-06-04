@@ -1,10 +1,11 @@
 import { captureUtcOffset } from '../adaptation';
-import type { SlackFileAttachment, SlackMessage, SlackMessageDelete, SlackMessageEdit, SlackUser } from './types';
+import type { SlackFileAttachment, SlackMessage, SlackMessageDelete, SlackMessageEdit, SlackReactionEvent, SlackUser } from './types';
 import type {
   CanonicalAttachment,
   CanonicalDeleteEvent,
   CanonicalEditEvent,
   CanonicalMessageEvent,
+  CanonicalServiceEvent,
   CanonicalUser,
   ContentNode,
 } from '../adaptation/types';
@@ -122,6 +123,7 @@ const inferAttachmentType = (file: SlackFileAttachment): CanonicalAttachment['ty
 
 const adaptFileAttachment = (file: SlackFileAttachment): CanonicalAttachment => ({
   type: inferAttachmentType(file),
+  platformFileId: file.id,
   ...(file.mimeType && { mimeType: file.mimeType }),
   ...((file.name ?? file.title) && { fileName: file.name ?? file.title }),
   ...(file.width != null && { width: file.width }),
@@ -175,5 +177,23 @@ export const adaptSlackDelete = (del: SlackMessageDelete): CanonicalDeleteEvent 
     receivedAtMs: now,
     timestampSec: Math.floor(now / 1000),
     utcOffsetMin: del.utcOffsetMin ?? captureUtcOffset(),
+  };
+};
+
+export const adaptSlackReaction = (reaction: SlackReactionEvent): CanonicalServiceEvent => {
+  const now = reaction.receivedAtMs ?? Date.now();
+  return {
+    type: 'service',
+    chatId: reaction.chatId,
+    ...(reaction.sender && { actor: adaptUser(reaction.sender) }),
+    receivedAtMs: now,
+    timestampSec: Math.floor(now / 1000),
+    utcOffsetMin: reaction.utcOffsetMin ?? captureUtcOffset(),
+    action: {
+      action: 'message_reaction',
+      messageId: reaction.messageId,
+      reaction: reaction.reaction,
+      operation: reaction.operation,
+    },
   };
 };

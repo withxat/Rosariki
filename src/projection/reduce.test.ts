@@ -358,5 +358,18 @@ describe('reduce', () => {
       }
     });
 
+    it('pushes ICMessageReactionEvent', () => {
+      const ic = reduce(createEmptyIC('chat1'), service({
+        action: { action: 'message_reaction', messageId: '1', reaction: 'eyes', operation: 'added' },
+      }));
+      const node = ic.nodes[0]!;
+      if (node.type === 'system_event' && node.kind === 'message_reaction') {
+        expect(node.messageId).toBe('1');
+        expect(node.reaction).toBe('eyes');
+        expect(node.operation).toBe('added');
+        expect(node.actor).toEqual(alice);
+      }
+    });
+
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createReadImageTool, createTool, executeToolCall } from './tools';
+import { createChatInteractionTools, createReadImageTool, createTool, executeToolCall } from './tools';
 
 const createTinyPng = async (): Promise<Buffer> => {
   const { default: sharp } = await import('sharp');
@@ -61,6 +61,42 @@ describe('createReadImageTool', () => {
       requiresFollowUp: true,
       content: [{ kind: 'image', detail: 'low' }],
     });
+  });
+});
+
+describe('createChatInteractionTools', () => {
+  it('creates Slack interaction tools', async () => {
+    const reactToMessage = vi.fn(async () => {});
+    const updateMessage = vi.fn(async () => ({ messageId: '1710000000.123456' }));
+    const deleteMessage = vi.fn(async () => {});
+    const readThread = vi.fn(async () => [{ message_id: '1710000000.123456', text: 'hello' }]);
+    const tools = createChatInteractionTools({ reactToMessage, updateMessage, deleteMessage, readThread });
+
+    await tools.find(t => t.function.name === 'react_to_message')!.execute({
+      message_id: '1710000000.123456',
+      reaction: ':eyes:',
+      operation: 'add',
+    }, { toolCallId: 'tc1' });
+    expect(reactToMessage).toHaveBeenCalledWith('1710000000.123456', ':eyes:', 'add');
+
+    const updateResult = await tools.find(t => t.function.name === 'update_message')!.execute({
+      message_id: '1710000000.123456',
+      text: 'edited',
+    }, { toolCallId: 'tc2' });
+    expect(updateMessage).toHaveBeenCalledWith('1710000000.123456', 'edited');
+    expect(updateResult.content).toBe(JSON.stringify({ ok: true, message_id: '1710000000.123456' }));
+
+    await tools.find(t => t.function.name === 'delete_message')!.execute({
+      message_id: '1710000000.123456',
+    }, { toolCallId: 'tc3' });
+    expect(deleteMessage).toHaveBeenCalledWith('1710000000.123456');
+
+    const threadResult = await tools.find(t => t.function.name === 'read_thread')!.execute({
+      message_id: '1710000000.123456',
+      limit: 10,
+    }, { toolCallId: 'tc4' });
+    expect(readThread).toHaveBeenCalledWith('1710000000.123456', 10);
+    expect(threadResult.content).toBe(JSON.stringify({ ok: true, replies: [{ message_id: '1710000000.123456', text: 'hello' }] }));
   });
 });
 

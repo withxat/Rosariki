@@ -13,7 +13,7 @@ import { createPipeline } from './pipeline';
 import type { PipelineEvent } from './pipeline';
 import type { RenderParams } from './rendering';
 import { createSlackManager } from './slack';
-import { adaptSlackDelete, adaptSlackEdit, adaptSlackMessage } from './slack/adapter';
+import { adaptSlackDelete, adaptSlackEdit, adaptSlackMessage, adaptSlackReaction } from './slack/adapter';
 import { isConfiguredChat, selectStartupReplayChatIds } from './startup';
 import { createTelegramManager } from './telegram';
 import { createAnimationToTextResolver } from './telegram/animation-to-text';
@@ -362,6 +362,40 @@ const main = async () => {
       pipeline.pushEvent(chatId, event);
   };
 
+  const slackBotSender = () => ({
+    id: slack?.botUserId() ?? 'slack-bot',
+    displayName: 'Cahciua',
+    isBot: true,
+  });
+
+  const injectSyntheticSlackEdit = (chatId: string, sent: { messageId: string; date: number; text: string }) => {
+    const event = adaptSlackEdit({
+      messageId: sent.messageId,
+      chatId,
+      sender: slackBotSender(),
+      date: sent.date,
+      editDate: Math.floor(Date.now() / 1000),
+      text: sent.text,
+    });
+
+    persistEvent(db, event);
+    if (isConfiguredChat(configuredChatIds, chatId))
+      pipeline.pushEvent(chatId, event);
+  };
+
+  const injectSyntheticSlackDelete = (chatId: string, messageId: string) => {
+    const event = adaptSlackDelete({
+      chatId,
+      messageIds: [messageId],
+      receivedAtMs: Date.now(),
+      utcOffsetMin: -new Date().getTimezoneOffset(),
+    });
+
+    persistEvent(db, event);
+    if (isConfiguredChat(configuredChatIds, chatId))
+      pipeline.pushEvent(chatId, event);
+  };
+
   // Background task manager — created before driver, wired via lazy ref.
   const driverRef: { handleEvent?: (chatId: string, rc: import('./rendering/types').RenderedContext) => void } = {};
   const backgroundTaskManager = createBackgroundTaskManager({
@@ -462,6 +496,34 @@ const main = async () => {
       // Return the first message's info
       return sentMessages[0]!;
     },
+    chatInteractions: chatId => {
+      if (resolveChatConfig(config, chatId).platform !== 'slack') return undefined;
+      if (!slack) return undefined;
+      return {
+        reactToMessage: async (messageId, reaction, operation) => {
+          if (operation === 'add') await slack.addReaction(chatId, messageId, reaction);
+          else await slack.removeReaction(chatId, messageId, reaction);
+        },
+        updateMessage: async (messageId, text) => {
+          const sent = await slack.updateMessage(chatId, messageId, text);
+          injectSyntheticSlackEdit(chatId, sent);
+          return { messageId: sent.messageId };
+        },
+        deleteMessage: async messageId => {
+          await slack.deleteMessage(chatId, messageId);
+          injectSyntheticSlackDelete(chatId, messageId);
+        },
+        readThread: async (messageId, limit) => {
+          const replies = await slack.readThread(chatId, messageId, limit);
+          return replies.map(reply => ({
+            message_id: reply.messageId,
+            sender: reply.sender?.displayName ?? reply.sender?.id ?? null,
+            text: reply.text,
+            date: reply.date,
+          }));
+        },
+      };
+    },
     loadCompaction: chatId => loadCompaction(db, chatId),
     loadLastProbeTime: chatId => loadLastProbeTime(db, chatId),
     persistCompaction: (chatId, meta) => persistCompaction(db, chatId, meta),
@@ -470,6 +532,7 @@ const main = async () => {
     runtimeConfig,
     loadMessageAttachments: (chatId, messageId) => loadMessageAttachments(db, chatId, messageId),
     downloadFile: fileId => requireTelegram().bot.downloadFile(fileId),
+    downloadPlatformFile: async fileId => await slack?.downloadFileById(fileId),
     downloadMessageMedia: telegram?.userbot
       ? (chatId, messageId) => telegram.userbot!.downloadMessageMedia(chatId, messageId)
       : undefined,
@@ -651,6 +714,25 @@ const main = async () => {
     }).log('Slack message deleted');
 
     const event = adaptSlackDelete(del);
+    persistEvent(db, event);
+
+    if (isConfiguredChat(configuredChatIds, event.chatId)) {
+      const rc = pipeline.pushEvent(event.chatId, event);
+      driver.handleEvent(event.chatId, rc);
+    }
+  });
+
+  slack?.onReaction(reaction => {
+    logger.withFields({
+      source: 'slack',
+      chatId: reaction.chatId,
+      messageId: reaction.messageId,
+      reaction: reaction.reaction,
+      operation: reaction.operation,
+      sender: reaction.sender?.username ?? reaction.sender?.displayName ?? reaction.sender?.id ?? 'unknown',
+    }).log('Slack reaction changed');
+
+    const event = adaptSlackReaction(reaction);
     persistEvent(db, event);
 
     if (isConfiguredChat(configuredChatIds, event.chatId)) {

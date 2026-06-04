@@ -498,6 +498,25 @@ describe('render', () => {
       expect(result).not.toContain('</event>');
     });
 
+    it('renders message_reaction event', () => {
+      const event: ICSystemEvent = {
+        type: 'system_event',
+        kind: 'message_reaction',
+        receivedAtMs: 1000,
+        timestampSec: 1741761000,
+        utcOffsetMin: 480,
+        actor: alice,
+        messageId: '42',
+        reaction: 'eyes',
+        operation: 'added',
+      };
+      const result = xml(render(ic([event])));
+      expect(result).toContain('type="message_reaction"');
+      expect(result).toContain('message_id="42"');
+      expect(result).toContain('reaction="eyes"');
+      expect(result).toContain('operation="added"');
+    });
+
   });
 
   describe('viewport filtering', () => {

@@ -166,6 +166,15 @@ const reduceService = (draft: IntermediateContext, event: CanonicalServiceEvent)
     draft.nodes.push({ ...base, kind: 'message_pinned', messageId: action.messageId, preview });
     break;
   }
+  case 'message_reaction':
+    draft.nodes.push({
+      ...base,
+      kind: 'message_reaction',
+      messageId: action.messageId,
+      reaction: action.reaction,
+      operation: action.operation,
+    });
+    break;
   }
 };
 
