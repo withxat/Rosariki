@@ -37,7 +37,6 @@
     "ffprobe-static": "^3.1.0",
     "grammy": "^1.35.0",
     "immer": "^10.1.1",
-    "lottie-frame": "^1.1.0",
     "markdown-it": "^14.1.1",
     "sharp": "^0.34.5",
     "telegram": "^2.26.22",
@@ -48,6 +47,9 @@
     "overrides": {
       "esbuild": "^0.24.0"
     }
+  },
+  "optionalDependencies": {
+    "lottie-frame": "^1.1.0"
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "^2.0.0",
