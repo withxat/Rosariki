@@ -6,7 +6,6 @@ import sharp from 'sharp';
 
 import type { CanonicalAttachment } from '../adaptation/types';
 import type { RuntimeConfig } from '../config/config';
-import type { Attachment } from '../telegram/message/types';
 import type {
   ConversationEntry,
   InputPart,
@@ -322,17 +321,14 @@ const DOWNLOAD_TIMEOUT_MS = 60_000;
 /** Shared file_id → Buffer logic used by download_file and read_image tools. */
 export const createAttachmentDownloader = (deps: {
   chatId: string;
-  loadMessageAttachments: (chatId: string, messageId: string) => (Attachment | CanonicalAttachment)[] | undefined;
-  downloadFile: (fileId: string) => Promise<Buffer>;
-  downloadPlatformFile?: (platformFileId: string) => Promise<Buffer | undefined>;
-  downloadMessageMedia?: (chatId: string, messageId: number) => Promise<Buffer | undefined>;
+  loadMessageAttachments: (chatId: string, messageId: string) => CanonicalAttachment[] | undefined;
+  downloadPlatformFile: (platformFileId: string) => Promise<Buffer | undefined>;
 }): (fileId: string) => Promise<Buffer> =>
   async (fileId: string): Promise<Buffer> => {
     const colonIdx = fileId.lastIndexOf(':');
     if (colonIdx < 0) throw new Error('Invalid file_id format. Expected "messageId:index".');
 
     const messageId = fileId.slice(0, colonIdx);
-    const numericMessageId = parseInt(messageId, 10);
     const attachmentIndex = parseInt(fileId.slice(colonIdx + 1), 10);
     if (isNaN(attachmentIndex) || attachmentIndex < 0)
       throw new Error('Invalid file_id: attachment index is not a valid number.');
@@ -344,18 +340,12 @@ export const createAttachmentDownloader = (deps: {
       throw new Error(`Attachment index ${attachmentIndex} out of range (message has ${attachments.length} attachments).`);
 
     const att = attachments[attachmentIndex]!;
+    if (!att.platformFileId)
+      throw new Error('Attachment has no platform file id.');
 
-    let buffer: Buffer | undefined;
-    if ('platformFileId' in att && att.platformFileId && deps.downloadPlatformFile) {
-      try { buffer = await deps.downloadPlatformFile(att.platformFileId); } catch { /* fall through */ }
-    }
-    if (!buffer && 'fileId' in att && att.fileId) {
-      try { buffer = await deps.downloadFile(att.fileId); } catch { /* fall through to userbot */ }
-    }
-    if (!buffer && deps.downloadMessageMedia && !isNaN(numericMessageId))
-      buffer = await deps.downloadMessageMedia(deps.chatId, numericMessageId);
+    const buffer = await deps.downloadPlatformFile(att.platformFileId);
     if (!buffer)
-      throw new Error('Failed to download file from chat platform.');
+      throw new Error('Failed to download file from Slack.');
 
     return buffer;
   };

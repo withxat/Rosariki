@@ -30,7 +30,6 @@ const RuntimeSchema = v.object({
 // --- Chat-level config schemas ---
 
 const ChatConfigSchema = v.object({
-  platform: v.optional(v.picklist(['telegram', 'slack']), 'telegram'),
   model: v.optional(v.string(), 'primary'),
   compaction: v.optional(v.object({
     maxContextEstTokens: v.optional(v.number(), 200000),
@@ -45,16 +44,6 @@ const ChatConfigSchema = v.object({
     enabled: v.optional(v.boolean(), false),
     model: v.optional(v.string(), ''),
   }), {}),
-  animationToText: v.optional(v.object({
-    enabled: v.optional(v.boolean(), false),
-    model: v.optional(v.string(), ''),
-    maxFrames: v.optional(v.number(), 5),
-  }), {}),
-  customEmojiToText: v.optional(v.object({
-    enabled: v.optional(v.boolean(), false),
-    model: v.optional(v.string(), ''),
-    maxFrames: v.optional(v.number(), 5),
-  }), {}),
   tools: v.object({
     bash: v.optional(v.object({
       backgroundThresholdSec: v.optional(v.number(), 10),
@@ -67,7 +56,6 @@ const ChatConfigSchema = v.object({
 
 // Per-chat overrides: all fields optional, no defaults
 const ChatOverrideSchema = v.optional(v.partial(v.object({
-  platform: v.picklist(['telegram', 'slack']),
   model: v.string(),
   compaction: v.partial(v.object({
     maxContextEstTokens: v.number(),
@@ -81,16 +69,6 @@ const ChatOverrideSchema = v.optional(v.partial(v.object({
   imageToText: v.partial(v.object({
     enabled: v.boolean(),
     model: v.string(),
-  })),
-  animationToText: v.partial(v.object({
-    enabled: v.boolean(),
-    model: v.string(),
-    maxFrames: v.number(),
-  })),
-  customEmojiToText: v.partial(v.object({
-    enabled: v.boolean(),
-    model: v.string(),
-    maxFrames: v.number(),
   })),
   tools: v.partial(v.object({
     bash: v.partial(v.object({
@@ -109,18 +87,12 @@ const BackgroundTasksSchema = v.optional(v.object({
 
 const ConfigSchema = v.object({
   models: v.record(v.string(), v.object(llmEndpointEntries)),
-  telegram: v.optional(v.object({
-    botToken: v.string(),
-    apiId: v.optional(v.number()),
-    apiHash: v.optional(v.string()),
-    session: v.optional(v.string(), ''),
-  })),
-  slack: v.optional(v.object({
+  slack: v.object({
     botToken: v.string(),
     appToken: v.string(),
     signingSecret: v.optional(v.string()),
     botUserId: v.optional(v.string()),
-  })),
+  }),
   database: v.optional(v.object({
     path: v.optional(v.string(), './data/cahciua.db'),
   }), {}),
@@ -146,14 +118,11 @@ export interface BackgroundTasksConfig {
 }
 
 export interface ResolvedChatConfig {
-  platform: 'telegram' | 'slack';
   primaryModel: LlmEndpoint;
   primaryApiFormat: ProviderFormat;
   compaction: CompactionConfig;
   probe: { enabled: boolean; model: LlmEndpoint };
   imageToText: { enabled: boolean; model?: string };
-  animationToText: { enabled: boolean; model?: string; maxFrames: number };
-  customEmojiToText: { enabled: boolean; model?: string; maxFrames: number };
   tools: {
     bash: { backgroundThresholdSec: number };
     webSearch: { tavilyKey: string };
@@ -200,7 +169,6 @@ export const resolveChatConfig = (config: Config, chatId: string): ResolvedChatC
   const primaryApiFormat: ProviderFormat = primaryModel.apiFormat ?? 'openai-chat';
 
   return {
-    platform: merged.platform,
     primaryModel,
     primaryApiFormat,
     compaction: {
@@ -214,16 +182,6 @@ export const resolveChatConfig = (config: Config, chatId: string): ResolvedChatC
     imageToText: {
       enabled: merged.imageToText.enabled,
       model: merged.imageToText.model || undefined,
-    },
-    animationToText: {
-      enabled: merged.animationToText.enabled,
-      model: merged.animationToText.model || undefined,
-      maxFrames: merged.animationToText.maxFrames,
-    },
-    customEmojiToText: {
-      enabled: merged.customEmojiToText.enabled,
-      model: merged.customEmojiToText.model || undefined,
-      maxFrames: merged.customEmojiToText.maxFrames,
     },
     tools: {
       bash: { backgroundThresholdSec: merged.tools.bash.backgroundThresholdSec },

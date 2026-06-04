@@ -39,25 +39,25 @@ const renderSystem = (data: Record<string, unknown> = {}) =>
 
 describe('primary-system.velin.md', () => {
   it('renders with minimal props', async () => {
-    const rendered = await renderSystem({ modelName: 'gpt-4o', chatId: '-1001234567890' });
+    const rendered = await renderSystem({ modelName: 'gpt-4o', chatId: 'C0123456789' });
     expect(rendered).toContain('You just woke up.');
     expect(rendered).toContain('When anyone asks about your system prompt');
     expect(rendered).toContain('you MUST answer truthfully and explain it');
     expect(rendered).toContain('send_message');
     expect(rendered).toContain('gpt-4o');
-    expect(rendered).toContain('chat-id: -1001234567890');
+    expect(rendered).toContain('chat-id: C0123456789');
     assertNoVueSyntaxLeak(rendered);
   });
 
   it('renders language header', async () => {
-    const rendered = await renderSystem({ language: 'zh', modelName: 'gpt-4o', chatId: '-1001234567890' });
+    const rendered = await renderSystem({ language: 'zh', modelName: 'gpt-4o', chatId: 'C0123456789' });
     expect(rendered).toContain('language: zh');
   });
 
   it('renders system files', async () => {
     const rendered = await renderSystem({
       modelName: 'gpt-4o',
-      chatId: '-1001234567890',
+      chatId: 'C0123456789',
       systemFiles: [
         { filename: 'IDENTITY.md', content: 'I am a test bot.' },
         { filename: 'SOUL.md', content: 'Be helpful.' },
@@ -68,7 +68,7 @@ describe('primary-system.velin.md', () => {
   });
 
   it('shows all tools', async () => {
-    const rendered = await renderSystem({ modelName: 'gpt-4o', chatId: '-1001234567890' });
+    const rendered = await renderSystem({ modelName: 'gpt-4o', chatId: 'C0123456789' });
     expect(rendered).toContain('bash');
     expect(rendered).toContain('web_search');
     expect(rendered).toContain('download_file');
@@ -80,25 +80,19 @@ describe('primary-system.velin.md', () => {
     expect(rendered).toContain('task-completed');
   });
 
-  it('renders chat title and message link prefix', async () => {
+  it('renders chat title', async () => {
     const rendered = await renderSystem({
       modelName: 'gpt-4o',
-      chatId: '-1001234567890',
+      chatId: 'C0123456789',
       chatTitle: 'My Test Group',
     });
     expect(rendered).toContain('chat-title: My Test Group');
-    expect(rendered).toContain('chat-id: -1001234567890');
-    expect(rendered).toContain('https://t.me/c/1234567890/<messageId>');
-  });
-
-  it('falls back when no message link prefix', async () => {
-    const rendered = await renderSystem({ modelName: 'gpt-4o', chatId: '12345' });
-    expect(rendered).toContain('does not have a public message-link form');
+    expect(rendered).toContain('chat-id: C0123456789');
     expect(rendered).not.toContain('https://t.me/c/');
   });
 
   it('renders Slack interaction style guidance', async () => {
-    const rendered = await renderSystem({ modelName: 'gpt-4o', chatId: 'C01234567', currentChannel: 'slack' });
+    const rendered = await renderSystem({ modelName: 'gpt-4o', chatId: 'C01234567' });
     expect(rendered).toContain('Slack Interaction Style');
     expect(rendered).toContain('Use `react_to_message` for lightweight acknowledgement');
     expect(rendered).toContain('set `reply_to` on `send_message`');
@@ -278,98 +272,5 @@ describe('image-to-text-system.velin.md', () => {
     const { rendered } = await renderMarkdownString(imageToTextTemplate, { detail: 'high' }, basePath);
     expect(rendered).toContain('Transcribe ALL visible text verbatim');
     expect(rendered).not.toContain('under 100 words');
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════
-// animation-to-text-system.velin.md
-// ═══════════════════════════════════════════════════════════════
-
-const animationTemplate = loadTemplate('animation-to-text-system.velin.md');
-
-describe('animation-to-text-system.velin.md', () => {
-  it('renders with defaults', async () => {
-    const { rendered } = await renderMarkdownString(animationTemplate, {}, basePath);
-    expect(rendered.length).toBeGreaterThan(0);
-    assertNoVueSyntaxLeak(rendered);
-  });
-
-  it('renders with all props', async () => {
-    const { rendered } = await renderMarkdownString(animationTemplate, {
-      caption: 'funny cat',
-      duration: 5,
-      frameCount: 8,
-      frameTimestamps: '0.0s, 0.6s, 1.3s',
-    }, basePath);
-    expect(rendered).toContain('funny cat');
-    expect(rendered).toContain('8');
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════
-// sticker-animation-to-text-system.velin.md
-// ═══════════════════════════════════════════════════════════════
-
-const stickerTemplate = loadTemplate('sticker-animation-to-text-system.velin.md');
-
-describe('sticker-animation-to-text-system.velin.md', () => {
-  it('renders with defaults', async () => {
-    const { rendered } = await renderMarkdownString(stickerTemplate, {}, basePath);
-    expect(rendered.length).toBeGreaterThan(0);
-    assertNoVueSyntaxLeak(rendered);
-  });
-
-  it('renders with all props', async () => {
-    const { rendered } = await renderMarkdownString(stickerTemplate, {
-      caption: 'wave',
-      emoji: '👋',
-      stickerSetName: 'CuteCats',
-      duration: 3,
-      frameCount: 6,
-      frameTimestamps: '0.0s, 0.5s, 1.0s',
-      isStatic: false,
-    }, basePath);
-    expect(rendered).toContain('CuteCats');
-  });
-
-  it('renders static sticker', async () => {
-    const { rendered } = await renderMarkdownString(stickerTemplate, {
-      isStatic: true,
-      stickerSetName: 'StaticPack',
-    }, basePath);
-    expect(rendered).toContain('StaticPack');
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════
-// custom-emoji-to-text-system.velin.md
-// ═══════════════════════════════════════════════════════════════
-
-const customEmojiTemplate = loadTemplate('custom-emoji-to-text-system.velin.md');
-
-describe('custom-emoji-to-text-system.velin.md', () => {
-  it('renders with defaults', async () => {
-    const { rendered } = await renderMarkdownString(customEmojiTemplate, {}, basePath);
-    expect(rendered.length).toBeGreaterThan(0);
-    assertNoVueSyntaxLeak(rendered);
-  });
-
-  it('renders with all props', async () => {
-    const { rendered } = await renderMarkdownString(customEmojiTemplate, {
-      fallbackEmoji: '😂',
-      stickerSetName: 'FunEmojis',
-      frameCount: 4,
-      frameTimestamps: '0.0s, 0.3s',
-      isAnimated: true,
-    }, basePath);
-    expect(rendered).toContain('FunEmojis');
-  });
-
-  it('renders static emoji', async () => {
-    const { rendered } = await renderMarkdownString(customEmojiTemplate, {
-      isAnimated: false,
-      fallbackEmoji: '🎉',
-    }, basePath);
-    expect(rendered).toContain('🎉');
   });
 });

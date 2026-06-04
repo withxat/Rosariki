@@ -1,29 +1,19 @@
 import { execFile } from 'node:child_process';
 
-import { adaptDelete, adaptEdit, adaptMessage, adaptServiceEvent, contentToPlainText, isServiceMessage } from './adaptation';
-import type { ContentNode } from './adaptation/types';
+import { contentToPlainText } from './adaptation';
 import { createBackgroundTaskManager } from './background-task';
 import { shellTaskFactory } from './background-task/shell';
 import { getChatIds, loadConfig, resolveBackgroundTasks, resolveChatConfig, resolveModel, resolveRuntime } from './config/config';
 import { setupLogger, useLogger } from './config/logger';
 import { loadContacts } from './contacts';
-import { createDatabase, loadCompaction, loadEvents, loadEventsWithId, loadImageAltTextByHash, loadKnownChatIds, loadLastProbeTime, loadLatestMessageContent, loadMessageAttachments, loadMessageFileId, loadTurnResponses, lookupChatId, migrateV1ToV2, persistCompaction, persistEvent, persistImageAltText, persistMessage, persistMessageDelete, persistMessageEdit, persistProbeResponse, persistTurnResponse, runMigrations, updateEventAttachments } from './db';
+import { createDatabase, loadCompaction, loadEvents, loadImageAltTextByHash, loadKnownChatIds, loadLastProbeTime, loadLatestMessageContent, loadMessageAttachments, loadTurnResponses, migrateV1ToV2, persistCompaction, persistEvent, persistImageAltText, persistProbeResponse, persistTurnResponse, runMigrations } from './db';
 import { createDriver } from './driver';
+import { computeThumbnailHash, createImageToTextResolver } from './media/image-to-text';
 import { createPipeline } from './pipeline';
-import type { PipelineEvent } from './pipeline';
 import type { RenderParams } from './rendering';
 import { createSlackManager } from './slack';
 import { adaptSlackDelete, adaptSlackEdit, adaptSlackMessage, adaptSlackReaction } from './slack/adapter';
 import { isConfiguredChat, selectStartupReplayChatIds } from './startup';
-import { createTelegramManager } from './telegram';
-import { createAnimationToTextResolver } from './telegram/animation-to-text';
-import { createCustomEmojiToTextResolver, emojiCacheKey } from './telegram/custom-emoji-to-text';
-import { canExtractFrames, extractFrames } from './telegram/frame-extractor';
-import { computeThumbnailHash, createImageToTextResolver } from './telegram/image-to-text';
-import { renderMarkdownToTelegramHTML } from './telegram/markdown';
-import type { Attachment } from './telegram/message/types';
-import { normalizeStickerSetMetadata } from './telegram/pack-title';
-import { loadSession } from './telegram/session';
 
 setupLogger();
 
@@ -36,16 +26,10 @@ const main = async () => {
 
   const chatIds = getChatIds(config);
   const configuredChatIds = new Set(chatIds);
-  const telegramChatIds = new Set(chatIds.filter(id => resolveChatConfig(config, id).platform === 'telegram'));
-  const telegramConfig = config.telegram?.botToken ? config.telegram : undefined;
-  if (telegramChatIds.size > 0 && !telegramConfig)
-    throw new Error('telegram.botToken is required when any chat has platform: telegram');
-  const slackChatIds = new Set(chatIds.filter(id => resolveChatConfig(config, id).platform === 'slack'));
-  const slackConfig = config.slack?.botToken && config.slack.appToken ? config.slack : undefined;
-  if (slackChatIds.size > 0 && !slackConfig)
-    throw new Error('slack.botToken and slack.appToken are required when any chat has platform: slack');
+  const slackConfig = config.slack;
+  if (!slackConfig?.botToken || !slackConfig.appToken)
+    throw new Error('slack.botToken and slack.appToken are required');
 
-  // Validate runtime config
   if (runtimeConfig.shell.length === 0)
     throw new Error('runtime.shell must be configured');
   if (!runtimeConfig.writeFile || runtimeConfig.writeFile.length === 0)
@@ -53,35 +37,18 @@ const main = async () => {
   if (!runtimeConfig.readFile || runtimeConfig.readFile.length === 0)
     throw new Error('runtime.readFile must be configured');
 
-  // Compute per-chat image-to-text enablement
   const imageToTextChatIds = new Set(
     chatIds.filter(id => resolveChatConfig(config, id).imageToText.enabled),
   );
 
-  // Use default chat config's imageToText model for the shared resolver
   const defaultChatConfig = resolveChatConfig(config, 'default');
   if (imageToTextChatIds.size > 0 && !defaultChatConfig.imageToText.model)
     throw new Error('imageToText.model is required when imageToText.enabled=true (in chats.default or per-chat override)');
-
-  // Compute per-chat animation-to-text enablement
-  const animationToTextChatIds = new Set(
-    chatIds.filter(id => resolveChatConfig(config, id).platform === 'telegram' && resolveChatConfig(config, id).animationToText.enabled),
-  );
-  if (animationToTextChatIds.size > 0 && !defaultChatConfig.animationToText.model)
-    throw new Error('animationToText.model is required when animationToText.enabled=true (in chats.default or per-chat override)');
-
-  // Compute per-chat custom-emoji-to-text enablement
-  const customEmojiToTextChatIds = new Set(
-    chatIds.filter(id => resolveChatConfig(config, id).platform === 'telegram' && resolveChatConfig(config, id).customEmojiToText.enabled),
-  );
-  if (customEmojiToTextChatIds.size > 0 && !defaultChatConfig.customEmojiToText.model)
-    throw new Error('customEmojiToText.model is required when customEmojiToText.enabled=true (in chats.default or per-chat override)');
 
   const db = createDatabase(config.database.path, logger);
   runMigrations(db, logger);
   await migrateV1ToV2(db, logger);
 
-  // Image-to-text resolver — shared between cold-start replay and live ingress.
   const imageToTextResolver = createImageToTextResolver({
     enabled: imageToTextChatIds.size > 0,
     model: defaultChatConfig.imageToText.model ? resolveModel(config, defaultChatConfig.imageToText.model) : undefined,
@@ -90,131 +57,34 @@ const main = async () => {
     persist: record => persistImageAltText(db, record),
   });
 
-  // Animation-to-text resolver — same pattern, for GIF/animated sticker descriptions.
-  const animationToTextResolver = createAnimationToTextResolver({
-    enabled: animationToTextChatIds.size > 0,
-    model: defaultChatConfig.animationToText.model ? resolveModel(config, defaultChatConfig.animationToText.model) : undefined,
-    logger,
-    lookupByHash: hash => loadImageAltTextByHash(db, hash),
-    persist: record => persistImageAltText(db, record),
-  });
-
-  // Custom-emoji-to-text resolver — resolves custom emoji sticker images/animations to descriptions.
-  // Bot API functions are bound lazily via closure over `ref` (telegram manager is created after resolver).
-  const ref: { telegram?: ReturnType<typeof createTelegramManager> } = {};
-  const customEmojiToTextResolver = createCustomEmojiToTextResolver({
-    enabled: customEmojiToTextChatIds.size > 0,
-    model: defaultChatConfig.customEmojiToText.model ? resolveModel(config, defaultChatConfig.customEmojiToText.model) : undefined,
-    maxFrames: defaultChatConfig.customEmojiToText.maxFrames,
-    logger,
-    lookupByHash: hash => loadImageAltTextByHash(db, hash),
-    persist: record => persistImageAltText(db, record),
-    getCustomEmojiStickers: async ids => {
-      const bot = ref.telegram!.bot.raw();
-      return await bot.api.getCustomEmojiStickers(ids);
-    },
-    downloadFile: async fileId => {
-      return await ref.telegram!.bot.downloadFile(fileId);
-    },
-    resolvePackTitle: async setName => {
-      return await ref.telegram!.resolvePackTitle(setName);
-    },
-  });
-
-  // Sync hydration: after persistEvent, set altText transiently on canonical
-  // attachments and custom_emoji content nodes from the image_alt_texts table.
-  // This is a sync DB lookup (better-sqlite3) — never stored back into events.
-  const walkCustomEmoji = (nodes: ContentNode[], fn: (node: Extract<ContentNode, { type: 'custom_emoji' }>) => void) => {
-    for (const n of nodes) {
-      if (n.type === 'custom_emoji') fn(n);
-      if ('children' in n) walkCustomEmoji(n.children, fn);
+  const hydrateAltTextFromCache = (event: import('./projection/reduce').PipelineEvent) => {
+    if (event.type !== 'message' && event.type !== 'edit') return;
+    for (const att of event.attachments) {
+      if (att.altText || !att.thumbnailWebp || !imageToTextChatIds.has(event.chatId)) continue;
+      const cached = loadImageAltTextByHash(db, computeThumbnailHash(att.thumbnailWebp));
+      if (cached) att.altText = cached.altText;
     }
   };
-
-  const hasUserbot = telegramConfig?.apiId != null && telegramConfig.apiHash != null;
 
   const knownChatIds = loadKnownChatIds(db);
 
-  const telegram = telegramConfig
-    ? createTelegramManager({
-        botToken: telegramConfig.botToken,
-        ...(hasUserbot ? {
-          apiId: telegramConfig.apiId,
-          apiHash: telegramConfig.apiHash,
-          session: loadSession(telegramConfig.session ?? ''),
-        } : {}),
-        initialChatIds: knownChatIds,
-        resolveChatId: messageIds => lookupChatId(db, messageIds),
-        imageToText: imageToTextChatIds.size > 0 ? imageToTextResolver : undefined,
-        imageToTextChatIds,
-        animationToText: animationToTextChatIds.size > 0 ? animationToTextResolver : undefined,
-        animationToTextChatIds,
-        animationMaxFrames: defaultChatConfig.animationToText.maxFrames,
-        customEmojiToText: customEmojiToTextChatIds.size > 0 ? customEmojiToTextResolver : undefined,
-        customEmojiToTextChatIds,
-      }, logger)
-    : undefined;
-  ref.telegram = telegram;
+  const slack = createSlackManager({
+    botToken: slackConfig.botToken,
+    appToken: slackConfig.appToken,
+    signingSecret: slackConfig.signingSecret,
+    botUserId: slackConfig.botUserId,
+    imageToText: imageToTextChatIds.size > 0 ? imageToTextResolver : undefined,
+    imageToTextChatIds,
+  }, logger);
 
-  const slack = slackConfig
-    ? createSlackManager({
-        botToken: slackConfig.botToken,
-        appToken: slackConfig.appToken,
-        signingSecret: slackConfig.signingSecret,
-        botUserId: slackConfig.botUserId,
-        imageToText: imageToTextChatIds.size > 0 ? imageToTextResolver : undefined,
-        imageToTextChatIds,
-      }, logger)
-    : undefined;
+  await slack.init();
 
-  if (slackChatIds.size > 0)
-    await slack!.init();
-
-  const hydrateAltTextFromCache = (event: PipelineEvent) => {
-    if (event.type !== 'message' && event.type !== 'edit') return;
-    for (const att of event.attachments) {
-      if (att.altText) continue;
-      if (att.thumbnailWebp && imageToTextChatIds.size > 0) {
-        const cached = loadImageAltTextByHash(db, computeThumbnailHash(att.thumbnailWebp));
-        if (cached) { att.altText = cached.altText; continue; }
-      }
-      if (att.animationHash && animationToTextChatIds.size > 0) {
-        const cached = loadImageAltTextByHash(db, att.animationHash);
-        if (cached) {
-          att.altText = cached.altText;
-          if (cached.stickerSetName) att.stickerSetName = cached.stickerSetName;
-        }
-      }
-    }
-    // Hydrate custom_emoji altText + stickerSetName from cache
-    if (customEmojiToTextChatIds.size > 0) {
-      walkCustomEmoji(event.content, node => {
-        if (node.altText) return;
-        const cached = loadImageAltTextByHash(db, emojiCacheKey(node.customEmojiId));
-        if (cached) {
-          node.altText = cached.altText;
-          if (cached.stickerSetName) node.stickerSetName = cached.stickerSetName;
-        } else {
-          const error = customEmojiToTextResolver.getError(node.customEmojiId);
-          if (error) node.altTextError = error;
-        }
-      });
-    }
-  };
-
-  // Telegram bot user ID from token — available immediately, used for myself detection.
-  const telegramBotUserId = telegramConfig?.botToken.split(':')[0];
   const contactNames = loadContacts(logger);
-  const pipeline = createPipeline((chatId): RenderParams => ({
-    botUserId: resolveChatConfig(config, chatId).platform === 'slack'
-      ? slack?.botUserId()
-      : telegramBotUserId,
+  const pipeline = createPipeline((_chatId): RenderParams => ({
+    botUserId: slack.botUserId(),
     contactNames,
   }));
 
-  // Cold-start: replay events per chat to rebuild IC + RC.
-  // If a compaction cursor exists, only load events from that point onward —
-  // older events are summarised and no longer needed for IC or rendering.
   const replayChatIds = selectStartupReplayChatIds(knownChatIds, chatIds);
   logger.withFields({ knownSessions: knownChatIds.length, replaySessions: replayChatIds.length }).log('Startup chat selection');
 
@@ -222,22 +92,7 @@ const main = async () => {
     const compaction = loadCompaction(db, chatId);
     if (compaction)
       pipeline.setCompactCursor(chatId, compaction.newCursorMs);
-    const eventsWithId = loadEventsWithId(db, chatId, compaction?.newCursorMs);
-    const events = eventsWithId.map(({ event }) => event);
-
-    // Legacy events stored raw set_name in stickerSetName. Normalize them once and
-    // persist the resolved title so cold-start replay and live ingress share one format.
-    const packTitleTasks: Promise<void>[] = [];
-    if (telegram) {
-      for (const { id: eventId, event } of eventsWithId) {
-        if ((event.type !== 'message' && event.type !== 'edit') || event.attachments.length === 0) continue;
-        packTitleTasks.push((async () => {
-          if (await normalizeStickerSetMetadata(event.attachments, telegram.resolvePackTitle))
-            updateEventAttachments(db, eventId, event.attachments);
-        })());
-      }
-    }
-    if (packTitleTasks.length > 0) await Promise.all(packTitleTasks);
+    const events = loadEvents(db, chatId, compaction?.newCursorMs);
 
     if (imageToTextChatIds.has(chatId)) {
       const tasks: Promise<void>[] = [];
@@ -249,13 +104,11 @@ const main = async () => {
       }
       if (tasks.length > 0) await Promise.all(tasks);
     }
-    // Sync-hydrate: set altText transiently from cache (covers both image and animation)
     for (const event of events) hydrateAltTextFromCache(event);
     pipeline.replayChat(chatId, events);
   }
   logger.withFields({ sessions: pipeline.getChatIds().length }).log('Cold start complete');
 
-  // Helper: read a file from the workspace via the configured readFile command.
   const readWorkspaceFile = (path: string): Promise<Buffer> =>
     new Promise<Buffer>((resolve, reject) => {
       const cmd = runtimeConfig.readFile;
@@ -271,78 +124,11 @@ const main = async () => {
           resolve(buf);
         },
       );
-      // Ensure stdin is closed so the child process can exit
       child.stdin?.end();
     });
 
-  const requireTelegram = () => {
-    if (!telegram) throw new Error('Telegram is not configured');
-    return telegram;
-  };
-
-  // Helper: send a media attachment via the appropriate Bot API method.
-  const sendSingleMedia = async (
-    chatId: string,
-    type: string,
-    buffer: Buffer,
-    caption?: string,
-    replyToMessageId?: number,
-    fileName?: string,
-  ) => {
-    const telegramManager = requireTelegram();
-    const opts = {
-      caption,
-      captionParseMode: caption ? 'HTML' as const : undefined,
-      replyToMessageId,
-      fileName,
-    };
-    switch (type) {
-    case 'photo': return await telegramManager.sendPhoto(chatId, buffer, opts);
-    case 'video': return await telegramManager.sendVideo(chatId, buffer, opts);
-    case 'audio': return await telegramManager.sendAudio(chatId, buffer, opts);
-    case 'voice': return await telegramManager.sendVoice(chatId, buffer, opts);
-    case 'animation': return await telegramManager.sendAnimation(chatId, buffer, opts);
-    case 'video_note': return await telegramManager.sendVideoNote(chatId, buffer, opts);
-    case 'document':
-    default: return await telegramManager.sendDocument(chatId, buffer, { ...opts, fileName });
-    }
-  };
-
-  // Helper: create a synthetic event for a bot-sent message and inject into pipeline.
-  const injectSyntheticEvent = (chatId: string, sent: { messageId: number; date: number; text: string; entities?: import('./telegram/message/types').MessageEntity[] }, replyToMessageId?: number) => {
-    const telegramManager = requireTelegram();
-    const botInfo = telegramManager.bot.botInfo();
-    const syntheticMsg = {
-      messageId: sent.messageId,
-      chatId,
-      sender: {
-        id: telegramBotUserId ?? 'telegram-bot',
-        firstName: botInfo?.firstName ?? 'Bot',
-        username: botInfo?.username,
-        isBot: true,
-        isPremium: false,
-      },
-      date: sent.date,
-      text: sent.text,
-      entities: sent.entities,
-      replyToMessageId,
-      source: 'bot' as const,
-    };
-    const event = adaptMessage(syntheticMsg);
-    event.isSelfSent = true;
-
-    const ic = pipeline.getIC(chatId);
-    if (ic?.nodes.some(n => n.type === 'message' && n.messageId === event.messageId))
-      logger.withFields({ chatId, messageId: event.messageId }).warn('Synthetic bypass: userbot arrived first (isSelfSent merged via dedup)');
-
-    persistEvent(db, event);
-    hydrateAltTextFromCache(event);
-    if (isConfiguredChat(configuredChatIds, chatId))
-      pipeline.pushEvent(chatId, event);
-  };
-
   const injectSyntheticSlackEvent = (chatId: string, sent: { messageId: string; date: number; text: string }, replyToMessageId?: string) => {
-    const slackBotUserId = slack?.botUserId() ?? 'slack-bot';
+    const slackBotUserId = slack.botUserId() ?? 'slack-bot';
     const event = adaptSlackMessage({
       messageId: sent.messageId,
       chatId,
@@ -363,7 +149,7 @@ const main = async () => {
   };
 
   const slackBotSender = () => ({
-    id: slack?.botUserId() ?? 'slack-bot',
+    id: slack.botUserId() ?? 'slack-bot',
     displayName: 'Cahciua',
     isBot: true,
   });
@@ -396,7 +182,6 @@ const main = async () => {
       pipeline.pushEvent(chatId, event);
   };
 
-  // Background task manager — created before driver, wired via lazy ref.
   const driverRef: { handleEvent?: (chatId: string, rc: import('./rendering/types').RenderedContext) => void } = {};
   const backgroundTaskManager = createBackgroundTaskManager({
     db,
@@ -408,10 +193,6 @@ const main = async () => {
     logger,
   });
   backgroundTaskManager.registerFactory(shellTaskFactory);
-
-  // Recover incomplete background tasks from DB (tasks paused during last shutdown
-  // or left incomplete after a crash). Non-resumable tasks (like shell_execute)
-  // immediately complete with a failure message, generating a RuntimeEvent.
   backgroundTaskManager.recoverTasks();
 
   const driver = createDriver({
@@ -422,108 +203,52 @@ const main = async () => {
     persistTurnResponse: (chatId, tr) => persistTurnResponse(db, chatId, tr),
     persistProbeResponse: (chatId, probe) => persistProbeResponse(db, chatId, probe),
     sendMessage: async (chatId, text, replyToMessageId, attachments) => {
-      if (resolveChatConfig(config, chatId).platform === 'slack') {
-        if (!slack) throw new Error('Slack is not configured');
-
-        if (!attachments || attachments.length === 0) {
-          const sent = await slack.sendMessage(chatId, text, replyToMessageId);
-          injectSyntheticSlackEvent(chatId, sent, replyToMessageId);
-          return sent;
-        }
-
-        const buffers = await Promise.all(
-          attachments.map(att => readWorkspaceFile(att.path)),
-        );
-        const sent = await slack.uploadFiles(
-          chatId,
-          attachments.map((att, i) => ({
-            buffer: buffers[i]!,
-            fileName: att.file_name,
-            title: att.file_name,
-          })),
-          text || undefined,
-          replyToMessageId,
-        );
+      if (!attachments || attachments.length === 0) {
+        const sent = await slack.sendMessage(chatId, text, replyToMessageId);
         injectSyntheticSlackEvent(chatId, sent, replyToMessageId);
         return sent;
       }
 
-      const telegramReplyToMessageId = replyToMessageId ? Number(replyToMessageId) : undefined;
-      if (telegramReplyToMessageId != null && Number.isNaN(telegramReplyToMessageId))
-        throw new Error(`Telegram reply_to must be numeric, got "${replyToMessageId}"`);
-
-      // --- Text-only message ---
-      if (!attachments || attachments.length === 0) {
-        const sent = await requireTelegram().sendMessage(chatId, text, telegramReplyToMessageId ? { replyToMessageId: telegramReplyToMessageId } : undefined);
-        injectSyntheticEvent(chatId, sent, telegramReplyToMessageId);
-        return sent;
-      }
-
-      // --- Message with attachments ---
-      // Read all files from workspace
       const buffers = await Promise.all(
         attachments.map(att => readWorkspaceFile(att.path)),
       );
-
-      const htmlCaption = text ? renderMarkdownToTelegramHTML(text) : undefined;
-
-      if (attachments.length === 1) {
-        // Single attachment — use type-specific send method
-        const att = attachments[0]!;
-        const sent = await sendSingleMedia(chatId, att.type, buffers[0]!, htmlCaption, telegramReplyToMessageId, att.file_name);
-        injectSyntheticEvent(chatId, sent, telegramReplyToMessageId);
-        return sent;
-      }
-
-      // Multiple attachments — use sendMediaGroup
-      // Map to MediaGroupItem (only photo, video, audio, document allowed in media groups)
-      const mediaGroupTypes = new Set(['photo', 'video', 'audio', 'document']);
-      const media = attachments.map((att, i) => ({
-        type: (mediaGroupTypes.has(att.type) ? att.type : 'document') as 'photo' | 'video' | 'audio' | 'document',
-        buffer: buffers[i]!,
-        fileName: att.file_name,
-        caption: i === 0 ? htmlCaption : undefined,
-        captionParseMode: i === 0 && htmlCaption ? 'HTML' as const : undefined,
-      }));
-
-      const sentMessages = await requireTelegram().sendMediaGroup(chatId, media, telegramReplyToMessageId ? { replyToMessageId: telegramReplyToMessageId } : undefined);
-
-      // Inject synthetic events for each sent message in the group
-      for (const sent of sentMessages) {
-        injectSyntheticEvent(chatId, sent, telegramReplyToMessageId);
-      }
-
-      // Return the first message's info
-      return sentMessages[0]!;
+      const sent = await slack.uploadFiles(
+        chatId,
+        attachments.map((att, i) => ({
+          buffer: buffers[i]!,
+          fileName: att.file_name,
+          title: att.file_name,
+        })),
+        text || undefined,
+        replyToMessageId,
+      );
+      injectSyntheticSlackEvent(chatId, sent, replyToMessageId);
+      return sent;
     },
-    chatInteractions: chatId => {
-      if (resolveChatConfig(config, chatId).platform !== 'slack') return undefined;
-      if (!slack) return undefined;
-      return {
-        reactToMessage: async (messageId, reaction, operation) => {
-          if (operation === 'add') await slack.addReaction(chatId, messageId, reaction);
-          else await slack.removeReaction(chatId, messageId, reaction);
-        },
-        updateMessage: async (messageId, text) => {
-          const sent = await slack.updateMessage(chatId, messageId, text);
-          injectSyntheticSlackEdit(chatId, sent);
-          return { messageId: sent.messageId };
-        },
-        deleteMessage: async messageId => {
-          await slack.deleteMessage(chatId, messageId);
-          injectSyntheticSlackDelete(chatId, messageId);
-        },
-        readThread: async (messageId, limit) => {
-          const replies = await slack.readThread(chatId, messageId, limit);
-          return replies.map(reply => ({
-            message_id: reply.messageId,
-            sender: reply.sender?.displayName ?? reply.sender?.id ?? null,
-            text: reply.text,
-            date: reply.date,
-          }));
-        },
-      };
-    },
+    chatInteractions: chatId => ({
+      reactToMessage: async (messageId, reaction, operation) => {
+        if (operation === 'add') await slack.addReaction(chatId, messageId, reaction);
+        else await slack.removeReaction(chatId, messageId, reaction);
+      },
+      updateMessage: async (messageId, text) => {
+        const sent = await slack.updateMessage(chatId, messageId, text);
+        injectSyntheticSlackEdit(chatId, sent);
+        return { messageId: sent.messageId };
+      },
+      deleteMessage: async messageId => {
+        await slack.deleteMessage(chatId, messageId);
+        injectSyntheticSlackDelete(chatId, messageId);
+      },
+      readThread: async (messageId, limit) => {
+        const replies = await slack.readThread(chatId, messageId, limit);
+        return replies.map(reply => ({
+          message_id: reply.messageId,
+          sender: reply.sender?.displayName ?? reply.sender?.id ?? null,
+          text: reply.text,
+          date: reply.date,
+        }));
+      },
+    }),
     loadCompaction: chatId => loadCompaction(db, chatId),
     loadLastProbeTime: chatId => loadLastProbeTime(db, chatId),
     persistCompaction: (chatId, meta) => persistCompaction(db, chatId, meta),
@@ -531,11 +256,7 @@ const main = async () => {
     getChatTitle: chatId => pipeline.getIC(chatId)?.chatTitle,
     runtimeConfig,
     loadMessageAttachments: (chatId, messageId) => loadMessageAttachments(db, chatId, messageId),
-    downloadFile: fileId => requireTelegram().bot.downloadFile(fileId),
-    downloadPlatformFile: async fileId => await slack?.downloadFileById(fileId),
-    downloadMessageMedia: telegram?.userbot
-      ? (chatId, messageId) => telegram.userbot!.downloadMessageMedia(chatId, messageId)
-      : undefined,
+    downloadPlatformFile: fileId => slack.downloadFileById(fileId),
     resolveModel: name => resolveModel(config, name),
     backgroundTask: {
       startTask: (typeName, sessionId, params, intention, timeoutMs) =>
@@ -547,116 +268,16 @@ const main = async () => {
     logger,
   });
 
-  // Wire lazy driver ref for background task completion notifications
   driverRef.handleEvent = driver.handleEvent;
 
   logger.withFields({ chatIds }).log('Driver initialized');
 
-  // Feed replayed sessions into Driver so it can respond to un-answered messages
-  // and trigger compaction check if context exceeds budget (compaction effect fires
-  // automatically when conditions are met — no explicit startup trigger needed).
   for (const chatId of pipeline.getChatIds()) {
     const rc = pipeline.getRC(chatId);
     if (rc) driver.handleEvent(chatId, rc);
   }
 
-  telegram?.onMessage(msg => {
-    // Service messages (join/leave/rename/pin/etc.) — route to service event path
-    if (isServiceMessage(msg)) {
-      const event = adaptServiceEvent(msg);
-      if (event) {
-        logger.withFields({
-          source: msg.source,
-          chatId: msg.chatId,
-          action: event.action.action,
-        }).log('Service event received');
-
-        persistEvent(db, event);
-        if (isConfiguredChat(configuredChatIds, event.chatId)) {
-          const rc = pipeline.pushEvent(event.chatId, event);
-          driver.handleEvent(event.chatId, rc);
-        }
-      }
-      return;
-    }
-
-    logger.withFields({
-      source: msg.source,
-      chatId: msg.chatId,
-      messageId: msg.messageId,
-      sender: msg.sender?.username ?? msg.sender?.firstName ?? msg.sender?.id ?? 'unknown',
-      text: msg.text.length > 100 ? `${msg.text.slice(0, 100)}...` : msg.text,
-      length: msg.text.length,
-    }).log('Message received');
-
-    const event = adaptMessage(msg);
-    persistEvent(db, event);
-
-    try { persistMessage(db, msg); } catch (err) { logger.withError(err).error('Failed to persist message'); }
-
-    if (isConfiguredChat(configuredChatIds, event.chatId)) {
-      hydrateAltTextFromCache(event);
-      const rc = pipeline.pushEvent(event.chatId, event);
-      driver.handleEvent(event.chatId, rc);
-    }
-  });
-
-  telegram?.onMessageEdit(edit => {
-    logger.withFields({
-      chatId: edit.chatId,
-      messageId: edit.messageId,
-      sender: edit.sender?.username ?? edit.sender?.firstName ?? edit.sender?.id ?? 'unknown',
-      text: edit.text.length > 100 ? `${edit.text.slice(0, 100)}...` : edit.text,
-      length: edit.text.length,
-    }).log('Message edited');
-
-    const event = adaptEdit(edit);
-
-    // Phantom edit detection: Telegram fires updateEditMessage with editDate set
-    // for metadata-only changes (link preview resolved, reactions, client re-saves).
-    // Skip if text, content, and attachments are identical to the stored event.
-    const prev = loadLatestMessageContent(db, event.chatId, event.messageId);
-    if (prev) {
-      const newText = contentToPlainText(event.content) || null;
-      const newContent = event.content.length > 0 ? event.content : null;
-      const newAttachments = event.attachments.length > 0 ? event.attachments : null;
-      if (prev.text === newText
-        && JSON.stringify(prev.content) === JSON.stringify(newContent)
-        && JSON.stringify(prev.attachments) === JSON.stringify(newAttachments)) {
-        logger.withFields({ chatId: edit.chatId, messageId: edit.messageId }).log('Phantom edit skipped (content unchanged)');
-        return;
-      }
-    }
-
-    persistEvent(db, event);
-
-    try { persistMessageEdit(db, edit); } catch (err) { logger.withError(err).error('Failed to persist message edit'); }
-
-    if (isConfiguredChat(configuredChatIds, event.chatId)) {
-      hydrateAltTextFromCache(event);
-      const rc = pipeline.pushEvent(event.chatId, event);
-      driver.handleEvent(event.chatId, rc);
-    }
-  });
-
-  telegram?.onMessageDelete(del => {
-    logger.withFields({
-      chatId: del.chatId ?? 'unknown',
-      messageIds: del.messageIds,
-    }).log('Message deleted');
-
-    const event = adaptDelete(del);
-    persistEvent(db, event);
-
-    try { persistMessageDelete(db, del); } catch (err) { logger.withError(err).error('Failed to persist message delete'); }
-
-    if (isConfiguredChat(configuredChatIds, event.chatId)) {
-      const rc = pipeline.pushEvent(event.chatId, event);
-      driver.handleEvent(event.chatId, rc);
-    }
-  });
-
-  slack?.onMessage(msg => {
+  slack.onMessage(msg => {
     logger.withFields({
       source: 'slack',
       chatId: msg.chatId,
@@ -676,7 +297,7 @@ const main = async () => {
     }
   });
 
-  slack?.onMessageEdit(edit => {
+  slack.onMessageEdit(edit => {
     logger.withFields({
       source: 'slack',
       chatId: edit.chatId,
@@ -706,7 +327,7 @@ const main = async () => {
     }
   });
 
-  slack?.onMessageDelete(del => {
+  slack.onMessageDelete(del => {
     logger.withFields({
       source: 'slack',
       chatId: del.chatId,
@@ -722,7 +343,7 @@ const main = async () => {
     }
   });
 
-  slack?.onReaction(reaction => {
+  slack.onReaction(reaction => {
     logger.withFields({
       source: 'slack',
       chatId: reaction.chatId,
@@ -745,118 +366,15 @@ const main = async () => {
     logger.log('Shutting down...');
     backgroundTaskManager.shutdown();
     driver.stop();
-    await Promise.all([
-      telegram?.stop(),
-      slack?.stop(),
-    ]);
+    await slack.stop();
     process.exit(0);
   };
 
   process.on('SIGINT', () => void shutdown());
   process.on('SIGTERM', () => void shutdown());
 
-  await Promise.all([
-    telegram?.start(),
-    slack?.start(),
-  ]);
+  await slack.start();
   logger.log('Cahciua is running');
-
-  // Post-startup: backfill animationHash for historical events that lack it.
-  // Runs after telegram.start() so download functions are available.
-  if (telegram && animationToTextChatIds.size > 0) {
-    const backfillLog = logger.withContext('animation-backfill');
-    for (const chatId of animationToTextChatIds) {
-      const compaction = loadCompaction(db, chatId);
-      const eventsWithId = loadEventsWithId(db, chatId, compaction?.newCursorMs);
-      const tasks: Promise<void>[] = [];
-      for (const { id: eventId, event } of eventsWithId) {
-        if (event.type !== 'message' && event.type !== 'edit') continue;
-        for (const att of event.attachments) {
-          if (att.animationHash || att.type === 'photo') continue;
-          // CanonicalAttachment lacks isAnimatedSticker/isVideoSticker fields.
-          // Heuristic: animation → always eligible; sticker without thumbnailWebp → animated/video sticker.
-          const isAnimation = att.type === 'animation';
-          const isLikelyAnimatedSticker = att.type === 'sticker' && !att.thumbnailWebp;
-          if (!isAnimation && !isLikelyAnimatedSticker) continue;
-
-          const caption = contentToPlainText(event.content);
-          tasks.push((async () => {
-            try {
-              const messageId = parseInt(event.messageId, 10);
-              if (isNaN(messageId)) return;
-
-              // Try userbot first (works for all media), then Bot API via fileId from messages table
-              let buffer = await telegram.userbot?.downloadMessageMedia(chatId, messageId);
-              if (!buffer) {
-                const fileId = loadMessageFileId(db, chatId, messageId);
-                if (fileId) buffer = await telegram.bot.downloadFile(fileId);
-              }
-              if (!buffer) {
-                backfillLog.withFields({ chatId, messageId }).warn('Backfill skipped: download failed');
-                return;
-              }
-
-              // Reconstruct minimal Attachment for canExtractFrames/extractFrames.
-              // Animated/video distinction is lost in canonical form; treat sticker
-              // without thumbnail as video sticker (ffmpeg handles both WEBM and TGS-converted).
-              const syntheticAtt: Attachment = {
-                type: att.type as 'animation' | 'sticker',
-                isVideoSticker: isLikelyAnimatedSticker,
-                mimeType: att.mimeType,
-              };
-              if (!canExtractFrames(syntheticAtt)) return;
-
-              const { frames, cacheKey, frameTimestamps } = await extractFrames(buffer, syntheticAtt, defaultChatConfig.animationToText.maxFrames);
-              att.animationHash = cacheKey;
-              updateEventAttachments(db, eventId, event.attachments);
-
-              await animationToTextResolver.resolve({
-                cacheKey,
-                frames,
-                caption,
-                isSticker: att.type === 'sticker',
-                stickerSetName: att.stickerSetName,
-                duration: att.duration,
-                frameTimestamps,
-              });
-            } catch (err) {
-              backfillLog.withError(err).warn('Failed to backfill animation');
-            }
-          })());
-        }
-      }
-      if (tasks.length > 0) {
-        backfillLog.withFields({ chatId, tasks: tasks.length }).log('Backfilling animation hashes');
-        await Promise.all(tasks);
-      }
-    }
-  }
-  // Post-startup: resolve custom emoji descriptions for historical events.
-  // Runs after telegram.start() so Bot API (getCustomEmojiStickers) is available.
-  if (telegram && customEmojiToTextChatIds.size > 0) {
-    for (const chatId of customEmojiToTextChatIds) {
-      const compaction = loadCompaction(db, chatId);
-      const events = loadEvents(db, chatId, compaction?.newCursorMs);
-      const emojiIds = new Map<string, string>();
-      for (const event of events) {
-        if (event.type !== 'message' && event.type !== 'edit') continue;
-        walkCustomEmoji(event.content, node => {
-          if (!emojiIds.has(node.customEmojiId)) {
-            const fallback = contentToPlainText(node.children);
-            emojiIds.set(node.customEmojiId, fallback);
-          }
-        });
-      }
-      if (emojiIds.size > 0) {
-        logger.withFields({ chatId, count: emojiIds.size }).log('Cold-start: resolving custom emoji descriptions');
-        await customEmojiToTextResolver.resolve(emojiIds);
-        // Re-hydrate + re-replay to get fresh altText into IC → RC
-        // (IC nodes from initial replay are Immer-frozen, so we must re-build)
-        for (const event of events) hydrateAltTextFromCache(event);
-        pipeline.replayChat(chatId, events);
-      }
-    }
-  }
 };
 
 main().catch(err => {

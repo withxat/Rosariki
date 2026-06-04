@@ -10,18 +10,10 @@ const props = defineProps({
   systemFiles: { type: Array, default: () => [] },
 
   // --- Semi-static section (changes rarely) ---
-  currentChannel: { type: String, default: 'telegram' },
+  currentChannel: { type: String, default: 'slack' },
   chatId: { type: String, required: true },
   chatTitle: { type: String, default: '' },
 })
-
-// Telegram message-link prefix derived from chatId.
-// Supergroups/channels (chatId starts with -100) → https://t.me/c/<internalId>.
-// Basic groups (negative non-supergroup) and 1:1 chats (positive user IDs) have
-// no shareable message-link form.
-const messageLinkPrefix = computed(() =>
-  props.chatId.startsWith('-100') ? `https://t.me/c/${props.chatId.slice(4)}` : ''
-)
 
 // Build tool list as plain markdown lines in script setup to avoid
 // Velin escaping issues with {{ }} interpolation and per-item <template v-if>.
@@ -37,14 +29,12 @@ const toolListBlock = computed(() => {
     '`kill_task` — Kill a running background task by its ID.',
     '`read_task_output` — Read the full output of a completed background task. Supports line-based pagination (offset, limit).',
   ]
-  if (props.currentChannel === 'slack') {
-    lines.push(
-      '`react_to_message` — Add or remove a reaction on a Slack message.',
-      '`update_message` — Update a Slack message previously sent by you.',
-      '`delete_message` — Delete a Slack message previously sent by you.',
-      '`read_thread` — Read replies in a Slack thread.',
-    )
-  }
+  lines.push(
+    '`react_to_message` — Add or remove a reaction on a Slack message.',
+    '`update_message` — Update a Slack message previously sent by you.',
+    '`delete_message` — Delete a Slack message previously sent by you.',
+    '`read_thread` — Read replies in a Slack thread.',
+  )
   return 'Your available tools are:' + NL + NL + lines.map(l => '- ' + l).join(NL)
 })
 </script>
@@ -77,15 +67,7 @@ Tables are **not** supported. If you need to present tabular data, use plain tex
 
 ### Linking to a specific message
 
-When you want to reference a specific earlier message by its `id`, you are **encouraged** to embed it as a Markdown link rather than just naming it in prose. This turns the citation into a tap-target in Telegram.<template v-if="messageLinkPrefix">
-
-URL format: `{{ messageLinkPrefix }}/<messageId>`, where `<messageId>` is the integer from the `id` attribute of the `<message>` element in the chat context. Always wrap it in `[...](...)` — do not paste the bare URL.
-
-</template><template v-else>
-
-This chat does not have a public message-link form available, so skip this and just refer to messages by quoting or paraphrasing.
-
-</template>
+When you want to reference a specific earlier message by its `id`, quote or paraphrase it in prose. Slack message timestamps in context are the stable identifiers for `reply_to` and interaction tools.
 
 ## Chat Context Format
 

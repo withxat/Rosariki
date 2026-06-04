@@ -13,23 +13,11 @@ models:
     # timeoutSec: 60                 # optional: abort requests that stream for too long
     # maxImagesAllowed: 10     # optional: Gemini Flash allows max 10 images
 
-# Optional Telegram integration. Required when any configured chat uses
-# platform: "telegram" (the default platform when omitted).
-# telegram:
-#   botToken: ""
-#   apiId: 0
-#   apiHash: ""
-#   session: ""
-
-# Optional Slack Socket Mode integration.
-# Create a Slack app with Socket Mode enabled, subscribe it to message events,
-# and grant bot scopes such as app_mentions:read, channels:history,
-# groups:history, chat:write, files:write, and users:read.
-# slack:
-#   botToken: ""       # xoxb-...
-#   appToken: ""       # xapp-..., requires connections:write
-#   signingSecret: ""  # optional for Socket Mode, kept for compatibility
-#   botUserId: ""      # optional; fetched with auth.test when omitted
+slack:
+  botToken: ""       # xoxb-...
+  appToken: ""       # xapp-..., requires connections:write
+  signingSecret: ""  # optional for Socket Mode, kept for compatibility
+  botUserId: ""      # optional; fetched with auth.test when omitted
 
 database:
   path: "./data/cahciua.db"
@@ -43,7 +31,7 @@ runtime:
   # writeFileSizeLimit: 20971520                               # max bytes for download_file (default 20 MB)
   # readFileSizeLimit: 20971520                                # max bytes for runtime.readFile consumers (send_message attachments, read_image)
 
-# Per-chat configuration. Keys (except "default") serve as the chat ID whitelist.
+# Per-chat configuration. Keys (except "default") are Slack channel IDs in the whitelist.
 # Each per-chat entry is deep-merged with "default" — only specify overrides.
 chats:
   default:
@@ -52,34 +40,15 @@ chats:
       maxContextEstTokens: 512000    # high water mark: trigger compaction when estimated context exceeds this
       workingWindowEstTokens: 8000   # low water mark: how many estimated tokens of raw content to retain after compaction
       # model: "primary"           # optional: override model for compaction calls (defaults to chat model)
-    # Probe: use a small/cheap model to decide whether to respond in group chats.
-    # When the bot is not @'d or replied to, the probe model runs first. If it
-    # chooses silence (no tool calls), the primary model is skipped entirely.
-    # If it produces tool calls, the primary model is activated for the real response.
     probe:
       enabled: false
       model: "probe"              # references a key in models
     imageToText:
       enabled: false
       model: "primary"            # references a key in models
-    animationToText:
-      enabled: false
-      model: "primary"            # references a key in models
-      # maxFrames: 5              # max equidistant frames to extract (default 5)
-    customEmojiToText:
-      enabled: false
-      model: "primary"            # references a key in models
-      # maxFrames: 5              # max equidistant frames for animated custom emoji (default 5)
-    # Tools: configuration for enabled tools.
     tools:
-      # bash:
-      #   backgroundThresholdSec: 10               # timeout threshold above which bash runs as background task
       webSearch:
         tavilyKey: ""                              # Tavily API key for web search (required)
 
   # Per-chat overrides — uncomment and customize:
-  # "751414718":                   # per-chat partial override (deep-merged with default)
-  #   model: "secondary"
-  # "-1002173016093": {}           # whitelisted with all defaults
-  # "C0123456789":                  # Slack channel ID
-  #   platform: "slack"
+  # "C0123456789": {}           # whitelisted with all defaults

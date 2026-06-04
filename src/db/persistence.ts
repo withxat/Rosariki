@@ -1,8 +1,8 @@
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 
 import type { DB } from './client';
 import { codec } from './codec';
-import { backgroundTasks, compactions, events, imageAltTexts, messages, probeResponsesV2, turnResponsesV2, users } from './schema';
+import { backgroundTasks, compactions, events, imageAltTexts, probeResponsesV2, turnResponsesV2 } from './schema';
 import { contentToPlainText } from '../adaptation';
 import type {
   CanonicalAttachment,
@@ -12,123 +12,10 @@ import type {
   CanonicalServiceEvent,
 } from '../adaptation/types';
 import type { CompactionSessionMeta, ProbeResponseV2, TurnResponseV2 } from '../driver/types';
+import type { ImageAltTextRecord } from '../media/image-to-text';
 import type { PipelineEvent } from '../projection/reduce';
 import type { RuntimeEvent, RuntimeEventData } from '../runtime-event';
-import type { ImageAltTextRecord } from '../telegram/image-to-text';
-import type { TelegramMessage, TelegramMessageDelete, TelegramMessageEdit, TelegramUser } from '../telegram/message';
-import type { Attachment } from '../telegram/message/types';
 import type { ConversationEntry } from '../unified-api/types';
-
-export const upsertUser = (db: DB, user: TelegramUser) => {
-  db.insert(users)
-    .values({
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      username: user.username,
-      isBot: user.isBot,
-      isPremium: user.isPremium,
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: users.id,
-      set: {
-        firstName: user.firstName,
-        lastName: user.lastName,
-        username: user.username,
-        isBot: user.isBot,
-        isPremium: user.isPremium,
-        updatedAt: new Date(),
-      },
-    })
-    .run();
-};
-
-export const persistMessage = (db: DB, msg: TelegramMessage) => {
-  if (msg.sender) upsertUser(db, msg.sender);
-
-  db.insert(messages)
-    .values({
-      chatId: msg.chatId,
-      messageId: msg.messageId,
-      senderId: msg.sender?.id,
-      date: msg.date,
-      editDate: msg.editDate,
-      text: msg.text,
-      entities: msg.entities,
-      replyToMessageId: msg.replyToMessageId,
-      replyToTopId: msg.replyToTopId,
-      forwardInfo: msg.forwardInfo,
-      mediaGroupId: msg.mediaGroupId,
-      viaBotId: msg.viaBotId,
-      attachments: msg.attachments,
-      createdAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: [messages.chatId, messages.messageId],
-      set: {
-        senderId: msg.sender?.id,
-        text: msg.text,
-        entities: msg.entities,
-        editDate: msg.editDate,
-        attachments: msg.attachments,
-        // Converge fields that may arrive from different sources (bot vs userbot).
-        // COALESCE(new, existing) ensures a non-null value is never overwritten by null.
-        replyToMessageId: sql`coalesce(${msg.replyToMessageId ?? null}, ${messages.replyToMessageId})`,
-        replyToTopId: sql`coalesce(${msg.replyToTopId ?? null}, ${messages.replyToTopId})`,
-        forwardInfo: sql`coalesce(${msg.forwardInfo ? JSON.stringify(msg.forwardInfo) : null}, ${messages.forwardInfo})`,
-        mediaGroupId: sql`coalesce(${msg.mediaGroupId ?? null}, ${messages.mediaGroupId})`,
-        viaBotId: sql`coalesce(${msg.viaBotId ?? null}, ${messages.viaBotId})`,
-      },
-    })
-    .run();
-};
-
-export const persistMessageEdit = (db: DB, edit: TelegramMessageEdit) => {
-  if (edit.sender) upsertUser(db, edit.sender);
-
-  const updated = db.update(messages)
-    .set({
-      text: edit.text,
-      editDate: edit.editDate,
-      entities: edit.entities,
-      attachments: edit.attachments,
-    })
-    .where(and(
-      eq(messages.chatId, edit.chatId),
-      eq(messages.messageId, edit.messageId),
-    ))
-    .run();
-
-  if (updated.changes === 0) {
-    db.insert(messages)
-      .values({
-        chatId: edit.chatId,
-        messageId: edit.messageId,
-        senderId: edit.sender?.id,
-        date: edit.date,
-        editDate: edit.editDate,
-        text: edit.text,
-        entities: edit.entities,
-        replyToMessageId: edit.replyToMessageId,
-        attachments: edit.attachments,
-        createdAt: new Date(),
-      })
-      .run();
-  }
-};
-
-export const persistMessageDelete = (db: DB, del: TelegramMessageDelete) => {
-  if (!del.chatId) return;
-
-  db.update(messages)
-    .set({ deletedAt: new Date() })
-    .where(and(
-      eq(messages.chatId, del.chatId),
-      inArray(messages.messageId, del.messageIds),
-    ))
-    .run();
-};
 
 export const persistEvent = (db: DB, event: PipelineEvent) => {
   const base = {
@@ -284,18 +171,6 @@ export const loadEvents = (db: DB, chatId: string, afterMs?: number): PipelineEv
     .orderBy(events.receivedAtMs, events.id)
     .all();
   return rows.map(reconstructEvent);
-};
-
-// Resolve chatId for message IDs that lack chat context (MTProto private chat deletes).
-// Operates on platform-level numeric IDs (messages table stores raw Telegram data).
-export const lookupChatId = (db: DB, messageIds: number[]): string | undefined => {
-  if (messageIds.length === 0) return undefined;
-  const row = db.select({ chatId: messages.chatId })
-    .from(messages)
-    .where(inArray(messages.messageId, messageIds))
-    .limit(1)
-    .get();
-  return row?.chatId;
 };
 
 export const loadKnownChatIds = (db: DB): string[] => {
@@ -468,29 +343,9 @@ export const loadEventsWithId = (db: DB, chatId: string, afterMs?: number): Even
   return rows.map(row => ({ id: row.id, event: reconstructEvent(row) }));
 };
 
-/** Look up a file ID from the messages table for backfill download. */
-export const loadMessageFileId = (db: DB, chatId: string, messageId: number): string | undefined => {
-  const row = db.select({ attachments: messages.attachments })
-    .from(messages)
-    .where(and(eq(messages.chatId, chatId), eq(messages.messageId, messageId)))
-    .limit(1)
-    .get();
-  return row?.attachments?.[0]?.fileId;
-};
-
-/** Load all attachments for a message (used by download_file tool). */
-export const loadMessageAttachments = (db: DB, chatId: string, messageId: string): (Attachment | CanonicalAttachment)[] | undefined => {
-  const numericMessageId = Number(messageId);
-  if (Number.isInteger(numericMessageId)) {
-    const row = db.select({ attachments: messages.attachments })
-      .from(messages)
-      .where(and(eq(messages.chatId, chatId), eq(messages.messageId, numericMessageId)))
-      .limit(1)
-      .get();
-    if (row?.attachments) return row.attachments;
-  }
-
-  const row = db.select({ attachments: messages.attachments })
+/** Load attachments for a message from the latest message/edit event (used by download_file tool). */
+export const loadMessageAttachments = (db: DB, chatId: string, messageId: string): CanonicalAttachment[] | undefined => {
+  const row = db.select({ attachments: events.attachments })
     .from(events)
     .where(and(eq(events.chatId, chatId), eq(events.messageId, messageId)))
     .orderBy(desc(events.id))

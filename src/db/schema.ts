@@ -2,7 +2,28 @@ import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqli
 
 import type { CanonicalAttachment, CanonicalForwardInfo, CanonicalUser, ContentNode, ServiceAction } from '../adaptation/types';
 import type { RuntimeEventData } from '../runtime-event';
-import type { Attachment, ForwardInfo, MessageEntity } from '../telegram/message/types';
+
+/** Legacy Telegram `messages` table JSON shapes (historical rows only). */
+export interface LegacyMessageEntity {
+  type: string;
+  offset: number;
+  length: number;
+  [key: string]: unknown;
+}
+
+export interface LegacyAttachment {
+  type: string;
+  fileId?: string;
+  mimeType?: string;
+  [key: string]: unknown;
+}
+
+export interface LegacyForwardInfo {
+  fromUserId?: string;
+  fromChatId?: string;
+  date?: number;
+  [key: string]: unknown;
+}
 
 type AnyMsg = Record<string, any>;
 
@@ -27,7 +48,7 @@ export const messages = sqliteTable('messages', {
   text: text('text'),
 
   // Formatted text entities (bold, links, mentions, etc.) — stored as JSON
-  entities: text('entities', { mode: 'json' }).$type<MessageEntity[]>(),
+  entities: text('entities', { mode: 'json' }).$type<LegacyMessageEntity[]>(),
 
   // Reply & thread context
   replyToMessageId: integer('reply_to_message_id'),
@@ -35,7 +56,7 @@ export const messages = sqliteTable('messages', {
 
   // Forward info — stored as JSON since the shape varies
   // (forwarded from user vs channel vs hidden, etc.)
-  forwardInfo: text('forward_info', { mode: 'json' }).$type<ForwardInfo>(),
+  forwardInfo: text('forward_info', { mode: 'json' }).$type<LegacyForwardInfo>(),
 
   // Media group (multiple photos/videos sent as album)
   mediaGroupId: text('media_group_id'),
@@ -44,7 +65,7 @@ export const messages = sqliteTable('messages', {
   viaBotId: text('via_bot_id'),
 
   // Media attachments — JSON array
-  attachments: text('attachments', { mode: 'json' }).$type<Attachment[]>(),
+  attachments: text('attachments', { mode: 'json' }).$type<LegacyAttachment[]>(),
 
   deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 

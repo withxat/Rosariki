@@ -10,12 +10,12 @@ import { collectRecentSendMessageAssessments, renderRecentSendMessageHumanLikene
 import { createBashTool, createAttachmentDownloader, createChatInteractionTools, createDownloadFileTool, createKillTaskTool, createReadImageTool, createReadTaskOutputTool, createSendMessageTool, createWebSearchTool } from './tools';
 import type { CahciuaTool, ChatInteractionDeps, SendMessageAttachment } from './tools';
 import type { CompactionSessionMeta, DriverConfig, LlmEndpoint, ProbeResponseV2, ProviderFormat, TurnResponseV2 } from './types';
+import type { CanonicalAttachment } from '../adaptation/types';
 import type { ActiveTaskInfo } from '../background-task/types';
 import type { RuntimeConfig } from '../config/config';
+import { renderImageToTextSystemPrompt } from '../media/image-to-text-prompt';
+import { callDescriptionLlm } from '../media/llm-description';
 import type { RenderedContext } from '../rendering/types';
-import { renderImageToTextSystemPrompt } from '../telegram/image-to-text-prompt';
-import { callDescriptionLlm } from '../telegram/llm-description';
-import type { Attachment } from '../telegram/message/types';
 
 /** Format current time in local timezone as ISO 8601 with offset (e.g. 2025-03-13T22:30:00+08:00). */
 const localTimeNow = (): string => {
@@ -53,10 +53,8 @@ export const createDriver = (config: DriverConfig, deps: {
   setCompactCursor: (chatId: string, cursorMs: number) => RenderedContext | undefined;
   getChatTitle: (chatId: string) => string | undefined;
   runtimeConfig: RuntimeConfig;
-  loadMessageAttachments: (chatId: string, messageId: string) => Attachment[] | undefined;
-  downloadFile: (fileId: string) => Promise<Buffer>;
-  downloadPlatformFile?: (platformFileId: string) => Promise<Buffer | undefined>;
-  downloadMessageMedia?: (chatId: string, messageId: number) => Promise<Buffer | undefined>;
+  loadMessageAttachments: (chatId: string, messageId: string) => CanonicalAttachment[] | undefined;
+  downloadPlatformFile: (platformFileId: string) => Promise<Buffer | undefined>;
   resolveModel: (name: string) => LlmEndpoint;
   backgroundTask: {
     startTask: (typeName: string, sessionId: string, params: unknown, intention: string | undefined, timeoutMs: number) => number;
@@ -193,9 +191,7 @@ export const createDriver = (config: DriverConfig, deps: {
             const downloadAttachment = createAttachmentDownloader({
               chatId,
               loadMessageAttachments: deps.loadMessageAttachments,
-              downloadFile: deps.downloadFile,
               downloadPlatformFile: deps.downloadPlatformFile,
-              downloadMessageMedia: deps.downloadMessageMedia,
             });
 
             const tools: CahciuaTool[] = [sendMessageTool];
@@ -259,7 +255,7 @@ export const createDriver = (config: DriverConfig, deps: {
             tools.push(createReadTaskOutputTool((taskId, offset, limit) => deps.backgroundTask.readTaskOutput(taskId, offset, limit)));
 
             const system = await renderSystemPrompt({
-              currentChannel: chatConfig.platform,
+              currentChannel: 'slack',
               modelName: chatConfig.primaryModel.model,
               chatId,
               chatTitle: deps.getChatTitle(chatId),
@@ -278,7 +274,7 @@ export const createDriver = (config: DriverConfig, deps: {
 
             const lateBindingParams = {
               timeNow: localTimeNow(),
-              currentChannel: chatConfig.platform,
+              currentChannel: 'slack',
               isMentioned, isReplied,
               recentSendMessageHumanLikenessXml,
               isInterrupted,

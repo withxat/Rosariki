@@ -18,16 +18,13 @@ export interface ImageAltTextRecord {
 }
 
 export interface ImageToTextResolver {
-  /** Generate + persist alt text. thumbnailBuffer used as cache key; highResBuffer (if provided) used for LLM input. */
   resolve(thumbnailBuffer: Buffer, caption: string, highResBuffer?: Buffer): Promise<ImageAltTextRecord>;
-  /** Hydrate altText on canonical attachments from cache/LLM (for cold-start replay). */
   hydrateCanonicalAttachments(attachments: CanonicalAttachment[], caption: string): Promise<void>;
 }
 
 const hashBuffer = (buffer: Buffer): string =>
   createHash('sha256').update(buffer).digest('hex');
 
-/** Compute cache key from a base64-encoded thumbnail. */
 export const computeThumbnailHash = (thumbnailWebp: string): string =>
   hashBuffer(Buffer.from(thumbnailWebp, 'base64'));
 
@@ -50,11 +47,10 @@ export const createImageToTextResolver = (params: {
   lookupByHash: (imageHash: string) => ImageAltTextRecord | null;
   persist: (record: ImageAltTextRecord) => void;
 }): ImageToTextResolver => {
-  const log = params.logger.withContext('telegram:image-to-text');
+  const log = params.logger.withContext('media:image-to-text');
   const semaphore = createSemaphore(params.maxConcurrency ?? 3);
   const inflightByHash = new Map<string, Promise<ImageAltTextRecord>>();
 
-  // Core: thumbnail hash → dedup → cache lookup → semaphore-gated LLM → persist
   const resolveByBuffer = (
     thumbnailBuffer: Buffer,
     caption: string,
@@ -71,7 +67,6 @@ export const createImageToTextResolver = (params: {
 
       await semaphore.acquire();
       try {
-        // Re-check after acquiring semaphore
         const recheck = params.lookupByHash(imageHash);
         if (recheck) return recheck;
 

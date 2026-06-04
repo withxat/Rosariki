@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 const props = defineProps({
   timeNow: { type: String, required: true },
-  currentChannel: { type: String, default: 'telegram' },
+  currentChannel: { type: String, default: 'slack' },
   isProbeEnabled: { type: Boolean, default: false },
   isProbing: { type: Boolean, default: false },
   isMentioned: { type: Boolean, default: false },

@@ -21,8 +21,7 @@ export interface CanonicalAttachment {
 }
 
 // Rich text content tree — platform-agnostic representation parsed from
-// platform-specific encodings (e.g. Telegram's text + offset-based entities).
-// Adaptation parses the encoding; Rendering serializes the tree.
+// platform-specific encodings (e.g. Slack mrkdwn). Rendering serializes the tree.
 export type ContentNode =
   | { type: 'text'; text: string }
   | { type: 'code'; text: string }

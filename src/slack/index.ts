@@ -4,9 +4,9 @@ import type { WebClient } from '@slack/web-api';
 
 import { registerHttpSecret } from '../http';
 import type { SlackFileAttachment, SlackMessage, SlackMessageDelete, SlackMessageEdit, SlackReactionEvent, SlackSentMessage, SlackThreadReply, SlackUser } from './types';
-import { createEventBus } from '../telegram/event-bus';
-import type { ImageToTextResolver } from '../telegram/image-to-text';
-import { generateThumbnail } from '../telegram/thumbnail';
+import { createEventBus } from '../event-bus';
+import type { ImageToTextResolver } from '../media/image-to-text';
+import { generateThumbnail } from '../media/thumbnail';
 
 export interface SlackManagerOptions {
   botToken: string;
