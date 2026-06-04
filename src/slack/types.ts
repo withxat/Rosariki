@@ -5,12 +5,27 @@ export interface SlackUser {
   isBot: boolean;
 }
 
+export interface SlackFileAttachment {
+  id: string;
+  name?: string;
+  title?: string;
+  mimeType?: string;
+  fileType?: string;
+  urlPrivate?: string;
+  size?: number;
+  width?: number;
+  height?: number;
+  duration?: number;
+  thumbnailWebp?: string;
+}
+
 export interface SlackMessage {
   messageId: string;
   chatId: string;
   sender?: SlackUser;
   date: number;
   text: string;
+  files?: SlackFileAttachment[];
   replyToMessageId?: string;
   receivedAtMs?: number;
   utcOffsetMin?: number;
@@ -23,6 +38,7 @@ export interface SlackMessageEdit {
   date: number;
   editDate: number;
   text: string;
+  files?: SlackFileAttachment[];
   receivedAtMs?: number;
   utcOffsetMin?: number;
 }

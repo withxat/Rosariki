@@ -55,7 +55,7 @@ const main = async () => {
 
   // Compute per-chat image-to-text enablement
   const imageToTextChatIds = new Set(
-    chatIds.filter(id => resolveChatConfig(config, id).platform === 'telegram' && resolveChatConfig(config, id).imageToText.enabled),
+    chatIds.filter(id => resolveChatConfig(config, id).imageToText.enabled),
   );
 
   // Use default chat config's imageToText model for the shared resolver
@@ -162,6 +162,8 @@ const main = async () => {
         appToken: slackConfig.appToken,
         signingSecret: slackConfig.signingSecret,
         botUserId: slackConfig.botUserId,
+        imageToText: imageToTextChatIds.size > 0 ? imageToTextResolver : undefined,
+        imageToTextChatIds,
       }, logger)
     : undefined;
 
@@ -605,6 +607,7 @@ const main = async () => {
     persistEvent(db, event);
 
     if (isConfiguredChat(configuredChatIds, event.chatId)) {
+      hydrateAltTextFromCache(event);
       const rc = pipeline.pushEvent(event.chatId, event);
       driver.handleEvent(event.chatId, rc);
     }
@@ -634,6 +637,7 @@ const main = async () => {
     persistEvent(db, event);
 
     if (isConfiguredChat(configuredChatIds, event.chatId)) {
+      hydrateAltTextFromCache(event);
       const rc = pipeline.pushEvent(event.chatId, event);
       driver.handleEvent(event.chatId, rc);
     }

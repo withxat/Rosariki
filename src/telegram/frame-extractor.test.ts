@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -12,6 +13,16 @@ import { canExtractFrames, extractFrames } from './frame-extractor';
 import type { Attachment } from './message/types';
 
 const exec = promisify(execFile);
+const require = createRequire(import.meta.url);
+
+const hasLottieFrame = (() => {
+  try {
+    require('lottie-frame');
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 describe('canExtractFrames', () => {
   const cases: [string, Partial<Attachment>, boolean][] = [
@@ -33,7 +44,9 @@ describe('canExtractFrames', () => {
 });
 
 describe('extractFrames', () => {
-  it('TGS: ≤5 frames → keep all', async () => {
+  const tgsIt = hasLottieFrame ? it : it.skip;
+
+  tgsIt('TGS: ≤5 frames → keep all', async () => {
     const lottie = { v: '5.5.2', fr: 30, ip: 0, op: 3, w: 64, h: 64, layers: [] };
     const tgs = gzipSync(Buffer.from(JSON.stringify(lottie)));
     const result = await extractFrames(tgs, { type: 'sticker', isAnimatedSticker: true } as Attachment);
@@ -42,14 +55,14 @@ describe('extractFrames', () => {
     for (const f of result.frames) expect(f.length).toBeGreaterThan(0);
   });
 
-  it('TGS: >5 frames → equidistant 5', async () => {
+  tgsIt('TGS: >5 frames → equidistant 5', async () => {
     const lottie = { v: '5.5.2', fr: 30, ip: 0, op: 60, w: 64, h: 64, layers: [] };
     const tgs = gzipSync(Buffer.from(JSON.stringify(lottie)));
     const result = await extractFrames(tgs, { type: 'sticker', isAnimatedSticker: true } as Attachment);
     expect(result.frames).toHaveLength(5);
   });
 
-  it('TGS: frameTimestamps present when fr > 0', async () => {
+  tgsIt('TGS: frameTimestamps present when fr > 0', async () => {
     const lottie = { v: '5.5.2', fr: 30, ip: 0, op: 60, w: 64, h: 64, layers: [] };
     const tgs = gzipSync(Buffer.from(JSON.stringify(lottie)));
     const result = await extractFrames(tgs, { type: 'sticker', isAnimatedSticker: true } as Attachment);

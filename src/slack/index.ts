@@ -3,14 +3,18 @@ import { App, LogLevel } from '@slack/bolt';
 import type { WebClient } from '@slack/web-api';
 
 import { registerHttpSecret } from '../http';
-import type { SlackMessage, SlackMessageDelete, SlackMessageEdit, SlackSentMessage, SlackUser } from './types';
+import type { SlackFileAttachment, SlackMessage, SlackMessageDelete, SlackMessageEdit, SlackSentMessage, SlackUser } from './types';
 import { createEventBus } from '../telegram/event-bus';
+import type { ImageToTextResolver } from '../telegram/image-to-text';
+import { generateThumbnail } from '../telegram/thumbnail';
 
 export interface SlackManagerOptions {
   botToken: string;
   appToken: string;
   signingSecret?: string;
   botUserId?: string;
+  imageToText?: ImageToTextResolver;
+  imageToTextChatIds?: Set<string>;
 }
 
 export interface SlackUploadItem {
@@ -41,6 +45,10 @@ const slackTsToSec = (ts: string): number => Math.floor(Number.parseFloat(ts));
 
 const userCacheKey = (teamId: string | undefined, userId: string) => `${teamId ?? ''}:${userId}`;
 
+const isImageFile = (file: SlackFileAttachment): boolean =>
+  (file.mimeType?.startsWith('image/') ?? false)
+  && file.mimeType !== 'image/svg+xml';
+
 export const createSlackManager = (options: SlackManagerOptions, logger: Logger): SlackManager => {
   const log = logger.withContext('slack');
   registerHttpSecret(options.botToken);
@@ -63,6 +71,57 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
   const seenMessageSet = new Set<string>();
   let botUserId = options.botUserId;
   let running = false;
+
+  const toFileAttachment = (file: any): SlackFileAttachment | undefined => {
+    const id = file?.id;
+    if (!id) return undefined;
+    return {
+      id,
+      name: file.name,
+      title: file.title,
+      mimeType: file.mimetype,
+      fileType: file.filetype,
+      urlPrivate: file.url_private_download ?? file.url_private,
+      size: file.size,
+      width: file.original_w ?? file.width ?? file.thumb_360_w,
+      height: file.original_h ?? file.height ?? file.thumb_360_h,
+      duration: file.duration_ms != null ? Math.round(file.duration_ms / 1000) : undefined,
+    };
+  };
+
+  const downloadFile = async (file: SlackFileAttachment): Promise<Buffer | undefined> => {
+    if (!file.urlPrivate) return undefined;
+    const res = await fetch(file.urlPrivate, {
+      headers: { Authorization: `Bearer ${options.botToken}` },
+    });
+    if (!res.ok) throw new Error(`Slack file download failed (${res.status} ${res.statusText})`);
+    return Buffer.from(await res.arrayBuffer());
+  };
+
+  const hydrateFiles = async (chatId: string, text: string, files?: SlackFileAttachment[]) => {
+    if (!files || files.length === 0) return;
+
+    const originalBuffers = new Map<SlackFileAttachment, Buffer>();
+    await Promise.all(files.map(async file => {
+      if (file.thumbnailWebp || !isImageFile(file)) return;
+      try {
+        const buffer = await downloadFile(file);
+        if (!buffer) return;
+        originalBuffers.set(file, buffer);
+        file.thumbnailWebp = await generateThumbnail(buffer);
+      } catch (err) {
+        log.withError(err).withFields({ fileId: file.id, chatId }).warn('Failed to generate Slack file thumbnail');
+      }
+    }));
+
+    if (options.imageToText && (!options.imageToTextChatIds || options.imageToTextChatIds.has(chatId))) {
+      await Promise.all(files.map(async file => {
+        if (!file.thumbnailWebp) return;
+        const thumbnailBuffer = Buffer.from(file.thumbnailWebp, 'base64');
+        await options.imageToText!.resolve(thumbnailBuffer, text, originalBuffers.get(file));
+      }));
+    }
+  };
 
   const loadUser = async (userId?: string, teamId?: string): Promise<SlackUser | undefined> => {
     if (!userId) return undefined;
@@ -94,17 +153,24 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
   };
 
   const toMessage = async (event: any): Promise<SlackMessage | undefined> => {
-    if (!event.channel || !event.ts || event.bot_id || event.subtype) return undefined;
+    if (!event.channel || !event.ts || event.bot_id) return undefined;
+    if (event.subtype && event.subtype !== 'file_share') return undefined;
     const sender = await loadUser(event.user, event.team);
-    return {
+    const files = Array.isArray(event.files)
+      ? event.files.map(toFileAttachment).filter((file: SlackFileAttachment | undefined): file is SlackFileAttachment => file != null)
+      : undefined;
+    const msg: SlackMessage = {
       messageId: event.ts,
       chatId: event.channel,
       sender,
       date: slackTsToSec(event.ts),
       text: event.text ?? '',
+      files,
       replyToMessageId: event.thread_ts && event.thread_ts !== event.ts ? event.thread_ts : undefined,
       ...captureIngressMeta(),
     };
+    await hydrateFiles(msg.chatId, msg.text, msg.files);
+    return msg;
   };
 
   const emitMessage = (msg: SlackMessage) => {
@@ -126,6 +192,10 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
         const changed = messageEvent.message;
         if (!changed?.channel || !changed?.ts || changed.bot_id) return;
         const sender = await loadUser(changed.user, changed.team ?? messageEvent.team);
+        const files = Array.isArray(changed.files)
+          ? changed.files.map(toFileAttachment).filter((file: SlackFileAttachment | undefined): file is SlackFileAttachment => file != null)
+          : undefined;
+        await hydrateFiles(changed.channel, changed.text ?? '', files);
         editBus.emit({
           messageId: changed.ts,
           chatId: changed.channel,
@@ -133,6 +203,7 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
           date: slackTsToSec(changed.ts),
           editDate: messageEvent.event_ts ? slackTsToSec(messageEvent.event_ts) : Math.floor(Date.now() / 1000),
           text: changed.text ?? '',
+          files,
           ...captureIngressMeta(),
         });
         return;

@@ -21,7 +21,7 @@ See `docs/dcp-design.md` for architecture rationale.
 
 ## Tech Stack
 
-Node ≥22, TypeScript, pnpm. Telegram: grammY (Bot API) + gramjs (MTProto). Slack: @slack/bolt + @slack/web-api (Socket Mode). DB: better-sqlite3 + Drizzle. State: Immer. Reactivity: alien-signals. Validation: Valibot. Prompts: `@velin-dev/core` (all in `prompts/*.velin.md` — never hardcode prompt strings). Logging: `@guiiai/logg`. Tests: Vitest. Media: sharp, ffmpeg-static + ffprobe-static; optional `lottie-frame` for TGS (pnpm optional dep; system `libpng-dev` + `librlottie-dev` when building TGS support).
+Node ≥22, TypeScript, pnpm. Telegram: grammY (Bot API) + gramjs (MTProto). Slack: @slack/bolt + @slack/web-api (Socket Mode; mrkdwn parsing; private file download + blocking image-to-text on inbound image attachments). DB: better-sqlite3 + Drizzle. State: Immer. Reactivity: alien-signals. Validation: Valibot. Prompts: `@velin-dev/core` (all in `prompts/*.velin.md` — never hardcode prompt strings). Logging: `@guiiai/logg`. Tests: Vitest. Media: sharp, ffmpeg-static + ffprobe-static; optional `lottie-frame` for TGS (pnpm optional dep; system `libpng-dev` + `librlottie-dev` when building TGS support).
 
 ## Commands
 
@@ -37,7 +37,7 @@ src/
 ├── driver/       LLM orchestration, tool loop, compaction, probe gate, format conversion.
 ├── db/           Drizzle schema + persistence. Schema is the source of truth.
 ├── telegram/     Bot+userbot, ingress queue, media-to-text transforms, frame extraction.
-├── slack/        Socket Mode ingress, adapter → canonical events, outbound messages/files.
+├── slack/        Socket Mode ingress, mrkdwn/file adapter, inbound image hydration, outbound messages/files.
 ├── config/       YAML loader (Valibot).
 ├── http.ts       fetch wrapper with credential redaction (registerHttpSecret).
 ├── pipeline.ts   Per-chat IC/RC state manager.
@@ -151,7 +151,7 @@ Probe responses go in `probe_responses` (dedicated table). They **never** enter 
 
 Three blocking ingress transforms (image / animation / custom-emoji), all sharing the `image_alt_texts` table (generic hash → alt text).
 
-- **Image**: cache key = sha256 of the deterministic thumbnail WebP. LLM input = PNG resized to ≤512px long edge. Rendering emits `<image>alt</image>` when alt is present.
+- **Image**: cache key = sha256 of the deterministic thumbnail WebP. LLM input = PNG resized to ≤512px long edge. Rendering emits `<image>alt</image>` when alt is present. Slack inbound images use the same resolver (`src/slack/index.ts` downloads files authed, thumbnails, then blocks on image-to-text before emit).
 - **Animation** (GIF/MP4, video sticker WEBM, animated sticker TGS): cache key = sha256 of file bytes (`animationHash` persisted on the attachment). Frame selection is count-based (≤maxFrames → all; > → equidistant including first/last). TGS detected by gzip magic bytes (don't rely on attachment flags — they may be missing during backfill). TGS frames use optional `lottie-frame` native addon (install may fail without rlottie headers). Files >20MB skipped. Rendering tags: `<animation type="...">` / `<sticker pack="...">`.
 - **Custom emoji**: cache key = `emoji:${customEmojiId}`. Resolved via `bot.api.getCustomEmojiStickers` batch. Alt text set transiently on `ContentNode.altText` — never persisted to `events`. Rendering tag: `<custom-emoji pack="...">`. Without alt: render fallback emoji char.
 
