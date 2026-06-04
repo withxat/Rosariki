@@ -59,6 +59,7 @@ export const createDriver = (config: DriverConfig, deps: {
   downloadPlatformFile: (platformFileId: string) => Promise<Buffer | undefined>;
   resolveModel: (name: string) => LlmEndpoint;
   getSlackEmojiCatalogXml?: () => string | undefined;
+  systemFiles?: { filename: string; content: string }[];
   backgroundTask: {
     startTask: (typeName: string, sessionId: string, params: unknown, intention: string | undefined, timeoutMs: number) => number;
     killTask: (taskId: number) => { ok: boolean; error?: string };
@@ -270,6 +271,9 @@ export const createDriver = (config: DriverConfig, deps: {
               modelName: chatConfig.primaryModel.model,
               chatId,
               chatTitle: deps.getChatTitle(chatId),
+              ...(deps.systemFiles && deps.systemFiles.length > 0
+                ? { systemFiles: deps.systemFiles }
+                : {}),
             });
 
             // --- Compute mention/reply/interrupt state from RC + TRs ---

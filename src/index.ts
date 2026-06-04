@@ -3,7 +3,8 @@ import { execFile } from 'node:child_process';
 import { contentToPlainText } from './adaptation';
 import { createBackgroundTaskManager } from './background-task';
 import { shellTaskFactory } from './background-task/shell';
-import { getChatIds, loadConfig, resolveBackgroundTasks, resolveChatConfig, resolveModel, resolveRuntime } from './config/config';
+import { loadAgentSystemFiles } from './agent-files';
+import { getChatIds, loadConfig, resolveAgent, resolveBackgroundTasks, resolveChatConfig, resolveModel, resolveRuntime } from './config/config';
 import { setupLogger, useLogger } from './config/logger';
 import { loadContacts } from './contacts';
 import { cancelScheduledWake, createDatabase, insertScheduledWake, listScheduledWakesForChat, loadCompaction, loadEvents, loadImageAltTextByHash, loadKnownChatIds, loadLastProbeTime, loadLatestMessageContent, loadMessageAttachments, loadTurnResponses, migrateV1ToV2, persistCompaction, persistEvent, persistImageAltText, persistProbeResponse, persistTurnResponse, runMigrations } from './db';
@@ -22,6 +23,8 @@ const logger = useLogger('cahciua');
 
 const main = async () => {
   const config = loadConfig();
+  const agentConfig = resolveAgent(config);
+  const agentSystemFiles = loadAgentSystemFiles(agentConfig.dir, logger);
   const runtimeConfig = resolveRuntime(config);
   const backgroundTasksConfig = resolveBackgroundTasks(config);
 
@@ -135,7 +138,7 @@ const main = async () => {
       chatId,
       sender: {
         id: slackBotUserId,
-        displayName: 'Cahciua',
+        displayName: agentConfig.displayName,
         isBot: true,
       },
       date: sent.date,
@@ -151,7 +154,7 @@ const main = async () => {
 
   const slackBotSender = () => ({
     id: slack.botUserId() ?? 'slack-bot',
-    displayName: 'Cahciua',
+    displayName: agentConfig.displayName,
     isBot: true,
   });
 
@@ -259,6 +262,7 @@ const main = async () => {
     loadMessageAttachments: (chatId, messageId) => loadMessageAttachments(db, chatId, messageId),
     downloadPlatformFile: fileId => slack.downloadFileById(fileId),
     getSlackEmojiCatalogXml: () => slack.emojiCatalogXml(),
+    systemFiles: agentSystemFiles,
     resolveModel: name => resolveModel(config, name),
     backgroundTask: {
       startTask: (typeName, sessionId, params, intention, timeoutMs) =>

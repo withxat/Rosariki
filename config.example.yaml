@@ -21,6 +21,12 @@ slack:
   signingSecret: ""  # optional for Socket Mode, kept for compatibility
   botUserId: ""      # optional; fetched with auth.test when omitted
 
+# Agent persona: copy agent/IDENTITY.example.md → agent/IDENTITY.md (and SOUL.example.md → SOUL.md).
+# Both are injected into the primary system prompt when present. Override directory with AGENT_DIR.
+agent:
+  dir: "./agent"
+  displayName: "Cahciua"   # sender name in chat XML for bot messages; align with IDENTITY
+
 database:
   path: "./data/cahciua.db"
 

@@ -60,6 +60,10 @@ Projection reducers are pure: `(IC, event) => IC'`. No I/O. Only IM platform eve
 
 External data (memory, profiles) enters via Driver-level late binding (`injectLateBindingPrompt()`), not by mutating IC.
 
+### Agent identity (IDENTITY.md / SOUL.md)
+
+Optional `agent/IDENTITY.md` and `agent/SOUL.md` (or `agent.dir` / `AGENT_DIR`) are loaded at startup and appended to the primary system prompt via `systemFiles`. `agent.displayName` in config sets the bot sender label in synthetic Slack events (defaults to `Cahciua`). Example templates: `agent/*.example.md`.
+
 ### Dual timestamps
 
 Every `CanonicalIMEvent` carries:

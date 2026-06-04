@@ -85,8 +85,14 @@ const BackgroundTasksSchema = v.optional(v.object({
   retentionCount: v.optional(v.number(), 20),
 }), {});
 
+const AgentSchema = v.optional(v.object({
+  dir: v.optional(v.string(), './agent'),
+  displayName: v.optional(v.string(), 'Cahciua'),
+}), {});
+
 const ConfigSchema = v.object({
   models: v.record(v.string(), v.object(llmEndpointEntries)),
+  agent: AgentSchema,
   slack: v.object({
     botToken: v.string(),
     appToken: v.string(),
@@ -115,6 +121,11 @@ export interface RuntimeConfig {
 export interface BackgroundTasksConfig {
   outputDir: string;
   retentionCount: number;
+}
+
+export interface AgentConfig {
+  dir: string;
+  displayName: string;
 }
 
 export interface ResolvedChatConfig {
@@ -148,6 +159,11 @@ export const resolveRuntime = (config: Config): RuntimeConfig => ({
 export const resolveBackgroundTasks = (config: Config): BackgroundTasksConfig => ({
   outputDir: config.backgroundTasks.outputDir,
   retentionCount: config.backgroundTasks.retentionCount,
+});
+
+export const resolveAgent = (config: Config): AgentConfig => ({
+  dir: process.env.AGENT_DIR ?? config.agent.dir,
+  displayName: config.agent.displayName,
 });
 
 export const resolveModel = (config: Config, name: string): LlmEndpoint => {
