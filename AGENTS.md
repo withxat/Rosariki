@@ -121,6 +121,10 @@ Independent alien-signals effect parallel to the reply flow. Dual water mark (to
 
 In group chats, run a small `probe.model` first when the bot wasn't recently mentioned/replied to. Probe responses go in `probe_responses` and **never** enter `composeContext`.
 
+### Slack thread vs channel placement
+
+Driver computes `computeSlackReplyPlacement()` from new RC segments (`mentionsMe` / `repliesToMe`, `messageId`, `replyToMessageId`) and injects `<slack-reply-placement>` into late-binding. Rendering sets `in-thread="true"` on `<message>` when the event was posted inside a thread. The model still omits `reply_to` only when intentionally broadcasting to the channel — not rewritten at send time.
+
 ### Media-to-text (image)
 
 When `imageToText.enabled`, Slack downloads inbound images, generates a deterministic WebP thumbnail, and blocks on LLM alt text before commit. Cache key = sha256 of thumbnail bytes in `image_alt_texts`. Alt text is transient on attachments at render time — never stored in `events`.

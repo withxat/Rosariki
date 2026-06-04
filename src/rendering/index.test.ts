@@ -230,6 +230,11 @@ describe('render', () => {
       expect(result).toContain('<in-reply-to id="99">');
       expect(result).not.toContain('<in-reply-to id="99" sender=');
     });
+
+    it('marks thread messages with in-thread attribute', () => {
+      const result = xml(render(ic([message({ replyToMessageId: '99' })])));
+      expect(result).toContain('in-thread="true"');
+    });
   });
 
   describe('forward', () => {

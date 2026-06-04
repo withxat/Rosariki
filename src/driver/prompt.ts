@@ -41,10 +41,12 @@ export const renderSystemPrompt = async (params: {
 
 export const renderLateBindingPrompt = async (params: {
   timeNow: string;
+  currentChannel?: string;
   isProbeEnabled?: boolean;
   isProbing?: boolean;
   isMentioned?: boolean;
   isReplied?: boolean;
+  slackReplyPlacementXml?: string;
   recentSendMessageHumanLikenessXml?: string;
   activeBackgroundTasks?: { id: number; typeName: string; intention?: string; liveSummary: string; startedMs: number; timeoutMs: number }[];
   isInterrupted?: boolean;

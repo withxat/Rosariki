@@ -122,6 +122,7 @@ const renderMessage = (msg: ICMessage, params: RenderParams): { content: Rendere
   ];
   if (msg.sender) attrs.push(`sender="${escapeXml(formatSender(msg.sender, params.contactNames))}"`);
   if (isMyself) attrs.push('myself="true"');
+  if (msg.replyToMessageId) attrs.push('in-thread="true"');
   attrs.push(`t="${formatTimestamp(msg.timestampSec, msg.utcOffsetMin)}"`);
 
   if (msg.editedAtSec != null)
@@ -246,7 +247,16 @@ export const render = (ic: IntermediateContext, params: RenderParams = {}): Rend
 
     if (node.type === 'message') {
       const { content, isMyself, isSelfSent, mentionsMe, repliesToMe } = renderMessage(node, params);
-      segments.push({ receivedAtMs: node.receivedAtMs, content, ...(isMyself && { isMyself }), ...(isSelfSent && { isSelfSent }), ...(mentionsMe && { mentionsMe }), ...(repliesToMe && { repliesToMe }) });
+      segments.push({
+        receivedAtMs: node.receivedAtMs,
+        content,
+        messageId: node.messageId,
+        ...(node.replyToMessageId && { replyToMessageId: node.replyToMessageId }),
+        ...(isMyself && { isMyself }),
+        ...(isSelfSent && { isSelfSent }),
+        ...(mentionsMe && { mentionsMe }),
+        ...(repliesToMe && { repliesToMe }),
+      });
     } else if (node.type === 'runtime_event') {
       const content = [{ type: 'text' as const, text: renderRuntimeEvent(node) }];
       segments.push({ receivedAtMs: node.receivedAtMs, content, isRuntimeEvent: true });

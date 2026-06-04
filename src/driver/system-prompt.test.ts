@@ -95,7 +95,7 @@ describe('primary-system.velin.md', () => {
     const rendered = await renderSystem({ modelName: 'gpt-4o', chatId: 'C01234567' });
     expect(rendered).toContain('Slack Interaction Style');
     expect(rendered).toContain('Use `react_to_message` for lightweight acknowledgement');
-    expect(rendered).toContain('set `reply_to` on `send_message`');
+    expect(rendered).toContain('<slack-reply-placement>');
     expect(rendered).toContain('A simple Slack reaction does not need a companion message');
   });
 });
@@ -127,8 +127,18 @@ describe('primary-late-binding.velin.md', () => {
     });
     expect(rendered).toContain('Slack behavior preference');
     expect(rendered).toContain('react_to_message');
-    expect(rendered).toContain('reply_to');
+    expect(rendered).toContain('in-thread="true"');
     expect(rendered).toContain('reaction may be the whole response');
+  });
+
+  it('renders slack-reply-placement block', async () => {
+    const rendered = await renderLateBinding({
+      timeNow: '2025-01-01T00:00:00Z',
+      currentChannel: 'slack',
+      slackReplyPlacementXml: '<slack-reply-placement mode="thread-default" in-thread="false"><suggested-reply-to>1.5</suggested-reply-to></slack-reply-placement>',
+    });
+    expect(rendered).toContain('<slack-reply-placement');
+    expect(rendered).toContain('suggested-reply-to');
   });
 
   it('renders activated state', async () => {

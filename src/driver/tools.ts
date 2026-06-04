@@ -75,7 +75,7 @@ export const createSendMessageTool = (
 ): CahciuaTool => {
   const properties: Record<string, unknown> = {
     text: { type: 'string', description: 'The message to send. When sending attachments, this becomes the caption.' },
-    reply_to: { type: 'string', description: 'A message id to reply to.' },
+    reply_to: { type: 'string', description: 'Slack message id (ts) to reply in-thread. Omit only for an intentional top-level channel message. Follow slack-reply-placement in late-binding when present.' },
     await_response: {
       type: 'boolean',
       description: 'Set to true if you need to perform additional actions after this message (e.g., send another message, use another tool). Defaults to false.',

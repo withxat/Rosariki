@@ -8,6 +8,7 @@ const props = defineProps({
   isProbing: { type: Boolean, default: false },
   isMentioned: { type: Boolean, default: false },
   isReplied: { type: Boolean, default: false },
+  slackReplyPlacementXml: { type: String, default: '' },
   recentSendMessageHumanLikenessXml: { type: String, default: '' },
   isInterrupted: { type: Boolean, default: false },
   activeBackgroundTasks: { type: Array, default: () => [] },
@@ -34,7 +35,15 @@ Reminder: call `send_message` to speak (multiple calls = multiple messages). No 
 
 <template v-if="currentChannel === 'slack'">
 
-Slack behavior preference: use the lightest native action that fits. If a reaction is enough acknowledgement, call `react_to_message` instead of sending a text reply. If you are responding to a specific message or continuing an existing thread, set `reply_to` on `send_message` so the reply stays in that thread. Do not pair a simple reaction with a redundant "got it" message.
+Slack behavior preference: use the lightest native action that fits. If a reaction is enough acknowledgement, call `react_to_message` instead of sending a text reply. Do not pair a simple reaction with a redundant "got it" message.
+
+Messages inside a thread carry `in-thread="true"` on the `<message>` element. Follow `<slack-reply-placement>` when present: it tells you whether `reply_to` is required and which message id to use. Omit `reply_to` only when you intentionally post a new top-level channel message for everyone.
+
+</template>
+
+<template v-if="slackReplyPlacementXml">
+
+{{ slackReplyPlacementXml }}
 
 </template>
 
@@ -54,7 +63,7 @@ You have already decided to act after deliberation. Make your tool calls now.
 
 You were mentioned — you will likely want to respond.
 <template v-if="currentChannel === 'slack'">
-If the mention only needs acknowledgement, a reaction may be the whole response. If it needs words, reply in thread with `reply_to` when there is a specific triggering message id.
+If the mention only needs acknowledgement, a reaction may be the whole response. If it needs words, follow `<slack-reply-placement>` for `reply_to` when present.
 </template>
 
 </template>
@@ -62,7 +71,7 @@ If the mention only needs acknowledgement, a reaction may be the whole response.
 
 Someone replied to your message — you will likely want to respond.
 <template v-if="currentChannel === 'slack'">
-Prefer replying in the same thread by setting `reply_to` to the relevant message id.
+Follow `<slack-reply-placement>` when present — you must stay in the same thread via `reply_to`.
 </template>
 
 </template>

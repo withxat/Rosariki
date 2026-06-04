@@ -7,6 +7,7 @@ import { composeContext, findWorkingWindowCursor, injectLateBindingPrompt, lates
 import { renderLateBindingPrompt, renderSystemPrompt } from './prompt';
 import { createRunner } from './runner';
 import { collectRecentSendMessageAssessments, renderRecentSendMessageHumanLikenessXml } from './send-message-human-likeness';
+import { computeSlackReplyPlacement, renderSlackReplyPlacementXml } from './slack-reply-placement';
 import { createBashTool, createAttachmentDownloader, createChatInteractionTools, createDownloadFileTool, createKillTaskTool, createReadImageTool, createReadTaskOutputTool, createSendMessageTool, createWebSearchTool } from './tools';
 import type { CahciuaTool, ChatInteractionDeps, SendMessageAttachment } from './tools';
 import type { CompactionSessionMeta, DriverConfig, LlmEndpoint, ProbeResponseV2, ProviderFormat, TurnResponseV2 } from './types';
@@ -271,11 +272,16 @@ export const createDriver = (config: DriverConfig, deps: {
             const recentSendMessageHumanLikenessXml = renderRecentSendMessageHumanLikenessXml(
               collectRecentSendMessageAssessments(await deps.loadTurnResponses(chatId)),
             );
+            const slackPlacement = computeSlackReplyPlacement(rcVal, lastProcessedMs());
+            const slackReplyPlacementXml = slackPlacement
+              ? renderSlackReplyPlacementXml(slackPlacement)
+              : undefined;
 
             const lateBindingParams = {
               timeNow: localTimeNow(),
               currentChannel: 'slack',
               isMentioned, isReplied,
+              slackReplyPlacementXml,
               recentSendMessageHumanLikenessXml,
               isInterrupted,
               activeBackgroundTasks: deps.backgroundTask.getActiveTasks(chatId),

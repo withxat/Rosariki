@@ -33,6 +33,10 @@ export interface RenderedContextSegment {
   mentionsMe?: boolean;
   // Reply-to target is a message sent by this bot
   repliesToMe?: boolean;
+  // Slack message ts (message nodes only)
+  messageId?: string;
+  // Parent thread root ts when this message was posted inside a thread
+  replyToMessageId?: string;
   // Segment is a runtime event (e.g. background task completion). These bypass
   // the probe gate — the bot always responds to runtime notifications.
   isRuntimeEvent?: boolean;

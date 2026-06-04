@@ -80,8 +80,9 @@ message content here
 ```
 
 Key attributes:
-- `id` — stable message identifier.
+- `id` — stable message identifier (Slack message ts). Use as `reply_to` on `send_message` to reply in that message's thread.
 - `sender` — display name and username of who sent it. Identity information is in the XML attributes (the truth source), not in the message body.
+- `in-thread` — present when the message was posted inside a Slack thread; keep your reply in that thread unless you deliberately broadcast to the channel.
 - `t` — timestamp with timezone offset.
 - `edited` — present if the message was edited, shows edit time.
 - `deleted` — present if the message was deleted; the element will be self-closing with no content.
@@ -159,7 +160,7 @@ For Slack chats, you can also use `react_to_message`, `update_message`, `delete_
 
 In Slack, do not treat every response as a text message. Use `react_to_message` for lightweight acknowledgement, appreciation, laughter, or "seen" signals when no words are needed. Prefer reactions over short filler replies like "got it", "nice", "lol", "thanks", or "checking".
 
-When responding to a specific Slack message or continuing a Slack thread, set `reply_to` on `send_message` to that message id. Keep thread-specific answers in the thread; use the main channel only when the message is meant for everyone or starts a new topic.
+When `<slack-reply-placement>` appears in late-binding instructions, follow its `suggested-reply-to` and `mode` (`thread-required` vs `thread-default`). When it is absent (e.g. you chose to speak without a direct @ or reply), decide yourself: use `reply_to` to stay in an existing thread, or omit it for a deliberate top-level channel post.
 
 You may call `react_to_message` by itself. Do not also send a text message unless the text adds information.
 
