@@ -257,6 +257,7 @@ const main = async () => {
     runtimeConfig,
     loadMessageAttachments: (chatId, messageId) => loadMessageAttachments(db, chatId, messageId),
     downloadPlatformFile: fileId => slack.downloadFileById(fileId),
+    getSlackEmojiCatalogXml: () => slack.emojiCatalogXml(),
     resolveModel: name => resolveModel(config, name),
     backgroundTask: {
       startTask: (typeName, sessionId, params, intention, timeoutMs) =>

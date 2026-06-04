@@ -121,6 +121,10 @@ Independent alien-signals effect parallel to the reply flow. Dual water mark (to
 
 In group chats, run a small `probe.model` first when the bot wasn't recently mentioned/replied to. Probe responses go in `probe_responses` and **never** enter `composeContext`.
 
+### Slack emoji catalog
+
+On `slack.init()`, call `emoji.list` (requires `emoji:read`) and inject `<slack-emoji-catalog>` into late-binding: workspace custom names from the API plus a static list of standard reaction names. Used for `react_to_message` and `:name:` in `send_message` mrkdwn.
+
 ### Slack thread vs channel placement
 
 Driver computes `computeSlackReplyPlacement()` from new RC segments (`mentionsMe` / `repliesToMe`, `messageId`, `replyToMessageId`) and injects `<slack-reply-placement>` into late-binding. Rendering sets `in-thread="true"` on `<message>` when the event was posted inside a thread. The model still omits `reply_to` only when intentionally broadcasting to the channel — not rewritten at send time.

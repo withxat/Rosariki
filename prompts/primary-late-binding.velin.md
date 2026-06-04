@@ -9,6 +9,7 @@ const props = defineProps({
   isMentioned: { type: Boolean, default: false },
   isReplied: { type: Boolean, default: false },
   slackReplyPlacementXml: { type: String, default: '' },
+  slackEmojiCatalogXml: { type: String, default: '' },
   recentSendMessageHumanLikenessXml: { type: String, default: '' },
   isInterrupted: { type: Boolean, default: false },
   activeBackgroundTasks: { type: Array, default: () => [] },
@@ -44,6 +45,12 @@ Messages inside a thread carry `in-thread="true"` on the `<message>` element. Fo
 <template v-if="slackReplyPlacementXml">
 
 {{ slackReplyPlacementXml }}
+
+</template>
+
+<template v-if="slackEmojiCatalogXml">
+
+{{ slackEmojiCatalogXml }}
 
 </template>
 

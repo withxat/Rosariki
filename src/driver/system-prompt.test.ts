@@ -131,6 +131,16 @@ describe('primary-late-binding.velin.md', () => {
     expect(rendered).toContain('reaction may be the whole response');
   });
 
+  it('renders slack-emoji-catalog block', async () => {
+    const rendered = await renderLateBinding({
+      timeNow: '2025-01-01T00:00:00Z',
+      currentChannel: 'slack',
+      slackEmojiCatalogXml: '<slack-emoji-catalog><custom-emoji-names>smile</custom-emoji-names></slack-emoji-catalog>',
+    });
+    expect(rendered).toContain('slack-emoji-catalog');
+    expect(rendered).toMatch(/custom-emoji-names.*smile/i);
+  });
+
   it('renders slack-reply-placement block', async () => {
     const rendered = await renderLateBinding({
       timeNow: '2025-01-01T00:00:00Z',

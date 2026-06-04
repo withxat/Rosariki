@@ -57,6 +57,7 @@ export const createDriver = (config: DriverConfig, deps: {
   loadMessageAttachments: (chatId: string, messageId: string) => CanonicalAttachment[] | undefined;
   downloadPlatformFile: (platformFileId: string) => Promise<Buffer | undefined>;
   resolveModel: (name: string) => LlmEndpoint;
+  getSlackEmojiCatalogXml?: () => string | undefined;
   backgroundTask: {
     startTask: (typeName: string, sessionId: string, params: unknown, intention: string | undefined, timeoutMs: number) => number;
     killTask: (taskId: number) => { ok: boolean; error?: string };
@@ -282,6 +283,7 @@ export const createDriver = (config: DriverConfig, deps: {
               currentChannel: 'slack',
               isMentioned, isReplied,
               slackReplyPlacementXml,
+              slackEmojiCatalogXml: deps.getSlackEmojiCatalogXml?.(),
               recentSendMessageHumanLikenessXml,
               isInterrupted,
               activeBackgroundTasks: deps.backgroundTask.getActiveTasks(chatId),

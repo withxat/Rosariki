@@ -47,6 +47,7 @@ export const renderLateBindingPrompt = async (params: {
   isMentioned?: boolean;
   isReplied?: boolean;
   slackReplyPlacementXml?: string;
+  slackEmojiCatalogXml?: string;
   recentSendMessageHumanLikenessXml?: string;
   activeBackgroundTasks?: { id: number; typeName: string; intention?: string; liveSummary: string; startedMs: number; timeoutMs: number }[];
   isInterrupted?: boolean;

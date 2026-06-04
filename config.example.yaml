@@ -13,6 +13,8 @@ models:
     # timeoutSec: 60                 # optional: abort requests that stream for too long
     # maxImagesAllowed: 10     # optional: Gemini Flash allows max 10 images
 
+# Bot scopes: app_mentions:read, channels:history, groups:history, chat:write,
+# files:write, reactions:write, emoji:read (workspace custom emoji catalog), users:read
 slack:
   botToken: ""       # xoxb-...
   appToken: ""       # xapp-..., requires connections:write

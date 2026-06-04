@@ -138,7 +138,7 @@ export const createChatInteractionTools = (deps: ChatInteractionDeps): CahciuaTo
       type: 'object',
       properties: {
         message_id: { type: 'string', description: 'The Slack message id / timestamp to react to.' },
-        reaction: { type: 'string', description: 'Reaction emoji name, with or without surrounding colons.' },
+        reaction: { type: 'string', description: 'Reaction name without colons (e.g. eyes, thumbsup, or a workspace custom name from slack-emoji-catalog in late-binding).' },
         operation: { type: 'string', enum: ['add', 'remove'], description: 'Whether to add or remove the reaction.' },
       },
       required: ['message_id', 'reaction', 'operation'],

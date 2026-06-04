@@ -7,6 +7,8 @@ import type { SlackFileAttachment, SlackMessage, SlackMessageDelete, SlackMessag
 import { createEventBus } from '../event-bus';
 import type { ImageToTextResolver } from '../media/image-to-text';
 import { generateThumbnail } from '../media/thumbnail';
+import type { SlackEmojiCatalog } from './emoji-catalog';
+import { fetchSlackEmojiCatalog, renderSlackEmojiCatalogXml } from './emoji-catalog';
 
 export interface SlackManagerOptions {
   botToken: string;
@@ -40,6 +42,8 @@ export interface SlackManager {
   readThread(channel: string, threadTs: string, limit?: number): Promise<SlackThreadReply[]>;
   downloadFileById(fileId: string): Promise<Buffer | undefined>;
   botUserId(): string | undefined;
+  emojiCatalog(): SlackEmojiCatalog | undefined;
+  emojiCatalogXml(): string | undefined;
   client: WebClient;
 }
 
@@ -78,6 +82,7 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
   const seenMessages: string[] = [];
   const seenMessageSet = new Set<string>();
   let botUserId = options.botUserId;
+  let emojiCatalog: SlackEmojiCatalog | undefined;
   let running = false;
 
   const toFileAttachment = (file: any): SlackFileAttachment | undefined => {
@@ -290,10 +295,19 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
   });
 
   const init = async () => {
-    if (botUserId) return;
-    const auth = await app.client.auth.test();
-    botUserId = auth.user_id;
-    log.withFields({ botUserId, team: auth.team }).log('Slack authenticated');
+    if (!botUserId) {
+      const auth = await app.client.auth.test();
+      botUserId = auth.user_id;
+      log.withFields({ botUserId, team: auth.team }).log('Slack authenticated');
+    }
+    if (!emojiCatalog) {
+      emojiCatalog = await fetchSlackEmojiCatalog(app.client, log);
+      log.withFields({
+        customEmoji: emojiCatalog.totalCustom,
+        truncated: emojiCatalog.truncated,
+        loadError: emojiCatalog.loadError ?? null,
+      }).log('Slack emoji catalog loaded');
+    }
   };
 
   const start = async () => {
@@ -415,6 +429,8 @@ export const createSlackManager = (options: SlackManagerOptions, logger: Logger)
     readThread,
     downloadFileById,
     botUserId: () => botUserId,
+    emojiCatalog: () => emojiCatalog,
+    emojiCatalogXml: () => emojiCatalog ? renderSlackEmojiCatalogXml(emojiCatalog) : undefined,
     client: app.client,
   };
 };
