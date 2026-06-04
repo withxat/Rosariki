@@ -36,6 +36,10 @@ const main = async () => {
 
   const chatIds = getChatIds(config);
   const configuredChatIds = new Set(chatIds);
+  const telegramChatIds = new Set(chatIds.filter(id => resolveChatConfig(config, id).platform === 'telegram'));
+  const telegramConfig = config.telegram?.botToken ? config.telegram : undefined;
+  if (telegramChatIds.size > 0 && !telegramConfig)
+    throw new Error('telegram.botToken is required when any chat has platform: telegram');
   const slackChatIds = new Set(chatIds.filter(id => resolveChatConfig(config, id).platform === 'slack'));
   const slackConfig = config.slack?.botToken && config.slack.appToken ? config.slack : undefined;
   if (slackChatIds.size > 0 && !slackConfig)
@@ -51,7 +55,7 @@ const main = async () => {
 
   // Compute per-chat image-to-text enablement
   const imageToTextChatIds = new Set(
-    chatIds.filter(id => resolveChatConfig(config, id).imageToText.enabled),
+    chatIds.filter(id => resolveChatConfig(config, id).platform === 'telegram' && resolveChatConfig(config, id).imageToText.enabled),
   );
 
   // Use default chat config's imageToText model for the shared resolver
@@ -61,14 +65,14 @@ const main = async () => {
 
   // Compute per-chat animation-to-text enablement
   const animationToTextChatIds = new Set(
-    chatIds.filter(id => resolveChatConfig(config, id).animationToText.enabled),
+    chatIds.filter(id => resolveChatConfig(config, id).platform === 'telegram' && resolveChatConfig(config, id).animationToText.enabled),
   );
   if (animationToTextChatIds.size > 0 && !defaultChatConfig.animationToText.model)
     throw new Error('animationToText.model is required when animationToText.enabled=true (in chats.default or per-chat override)');
 
   // Compute per-chat custom-emoji-to-text enablement
   const customEmojiToTextChatIds = new Set(
-    chatIds.filter(id => resolveChatConfig(config, id).customEmojiToText.enabled),
+    chatIds.filter(id => resolveChatConfig(config, id).platform === 'telegram' && resolveChatConfig(config, id).customEmojiToText.enabled),
   );
   if (customEmojiToTextChatIds.size > 0 && !defaultChatConfig.customEmojiToText.model)
     throw new Error('customEmojiToText.model is required when customEmojiToText.enabled=true (in chats.default or per-chat override)');
@@ -127,27 +131,29 @@ const main = async () => {
     }
   };
 
-  const hasUserbot = config.telegram.apiId != null && config.telegram.apiHash != null;
+  const hasUserbot = telegramConfig?.apiId != null && telegramConfig.apiHash != null;
 
   const knownChatIds = loadKnownChatIds(db);
 
-  const telegram = createTelegramManager({
-    botToken: config.telegram.botToken,
-    ...(hasUserbot ? {
-      apiId: config.telegram.apiId,
-      apiHash: config.telegram.apiHash,
-      session: loadSession(config.telegram.session ?? ''),
-    } : {}),
-    initialChatIds: knownChatIds,
-    resolveChatId: messageIds => lookupChatId(db, messageIds),
-    imageToText: imageToTextChatIds.size > 0 ? imageToTextResolver : undefined,
-    imageToTextChatIds,
-    animationToText: animationToTextChatIds.size > 0 ? animationToTextResolver : undefined,
-    animationToTextChatIds,
-    animationMaxFrames: defaultChatConfig.animationToText.maxFrames,
-    customEmojiToText: customEmojiToTextChatIds.size > 0 ? customEmojiToTextResolver : undefined,
-    customEmojiToTextChatIds,
-  }, logger);
+  const telegram = telegramConfig
+    ? createTelegramManager({
+        botToken: telegramConfig.botToken,
+        ...(hasUserbot ? {
+          apiId: telegramConfig.apiId,
+          apiHash: telegramConfig.apiHash,
+          session: loadSession(telegramConfig.session ?? ''),
+        } : {}),
+        initialChatIds: knownChatIds,
+        resolveChatId: messageIds => lookupChatId(db, messageIds),
+        imageToText: imageToTextChatIds.size > 0 ? imageToTextResolver : undefined,
+        imageToTextChatIds,
+        animationToText: animationToTextChatIds.size > 0 ? animationToTextResolver : undefined,
+        animationToTextChatIds,
+        animationMaxFrames: defaultChatConfig.animationToText.maxFrames,
+        customEmojiToText: customEmojiToTextChatIds.size > 0 ? customEmojiToTextResolver : undefined,
+        customEmojiToTextChatIds,
+      }, logger)
+    : undefined;
   ref.telegram = telegram;
 
   const slack = slackConfig
@@ -194,13 +200,13 @@ const main = async () => {
     }
   };
 
-  // Bot user ID from token — available immediately, used for myself detection
-  const botUserId = config.telegram.botToken.split(':')[0]!;
+  // Telegram bot user ID from token — available immediately, used for myself detection.
+  const telegramBotUserId = telegramConfig?.botToken.split(':')[0];
   const contactNames = loadContacts(logger);
   const pipeline = createPipeline((chatId): RenderParams => ({
     botUserId: resolveChatConfig(config, chatId).platform === 'slack'
       ? slack?.botUserId()
-      : botUserId,
+      : telegramBotUserId,
     contactNames,
   }));
 
@@ -220,12 +226,14 @@ const main = async () => {
     // Legacy events stored raw set_name in stickerSetName. Normalize them once and
     // persist the resolved title so cold-start replay and live ingress share one format.
     const packTitleTasks: Promise<void>[] = [];
-    for (const { id: eventId, event } of eventsWithId) {
-      if ((event.type !== 'message' && event.type !== 'edit') || event.attachments.length === 0) continue;
-      packTitleTasks.push((async () => {
-        if (await normalizeStickerSetMetadata(event.attachments, telegram.resolvePackTitle))
-          updateEventAttachments(db, eventId, event.attachments);
-      })());
+    if (telegram) {
+      for (const { id: eventId, event } of eventsWithId) {
+        if ((event.type !== 'message' && event.type !== 'edit') || event.attachments.length === 0) continue;
+        packTitleTasks.push((async () => {
+          if (await normalizeStickerSetMetadata(event.attachments, telegram.resolvePackTitle))
+            updateEventAttachments(db, eventId, event.attachments);
+        })());
+      }
     }
     if (packTitleTasks.length > 0) await Promise.all(packTitleTasks);
 
@@ -265,6 +273,11 @@ const main = async () => {
       child.stdin?.end();
     });
 
+  const requireTelegram = () => {
+    if (!telegram) throw new Error('Telegram is not configured');
+    return telegram;
+  };
+
   // Helper: send a media attachment via the appropriate Bot API method.
   const sendSingleMedia = async (
     chatId: string,
@@ -274,6 +287,7 @@ const main = async () => {
     replyToMessageId?: number,
     fileName?: string,
   ) => {
+    const telegramManager = requireTelegram();
     const opts = {
       caption,
       captionParseMode: caption ? 'HTML' as const : undefined,
@@ -281,25 +295,26 @@ const main = async () => {
       fileName,
     };
     switch (type) {
-    case 'photo': return await telegram.sendPhoto(chatId, buffer, opts);
-    case 'video': return await telegram.sendVideo(chatId, buffer, opts);
-    case 'audio': return await telegram.sendAudio(chatId, buffer, opts);
-    case 'voice': return await telegram.sendVoice(chatId, buffer, opts);
-    case 'animation': return await telegram.sendAnimation(chatId, buffer, opts);
-    case 'video_note': return await telegram.sendVideoNote(chatId, buffer, opts);
+    case 'photo': return await telegramManager.sendPhoto(chatId, buffer, opts);
+    case 'video': return await telegramManager.sendVideo(chatId, buffer, opts);
+    case 'audio': return await telegramManager.sendAudio(chatId, buffer, opts);
+    case 'voice': return await telegramManager.sendVoice(chatId, buffer, opts);
+    case 'animation': return await telegramManager.sendAnimation(chatId, buffer, opts);
+    case 'video_note': return await telegramManager.sendVideoNote(chatId, buffer, opts);
     case 'document':
-    default: return await telegram.sendDocument(chatId, buffer, { ...opts, fileName });
+    default: return await telegramManager.sendDocument(chatId, buffer, { ...opts, fileName });
     }
   };
 
   // Helper: create a synthetic event for a bot-sent message and inject into pipeline.
   const injectSyntheticEvent = (chatId: string, sent: { messageId: number; date: number; text: string; entities?: import('./telegram/message/types').MessageEntity[] }, replyToMessageId?: number) => {
-    const botInfo = telegram.bot.botInfo();
+    const telegramManager = requireTelegram();
+    const botInfo = telegramManager.bot.botInfo();
     const syntheticMsg = {
       messageId: sent.messageId,
       chatId,
       sender: {
-        id: botUserId,
+        id: telegramBotUserId ?? 'telegram-bot',
         firstName: botInfo?.firstName ?? 'Bot',
         username: botInfo?.username,
         isBot: true,
@@ -403,7 +418,7 @@ const main = async () => {
 
       // --- Text-only message ---
       if (!attachments || attachments.length === 0) {
-        const sent = await telegram.sendMessage(chatId, text, telegramReplyToMessageId ? { replyToMessageId: telegramReplyToMessageId } : undefined);
+        const sent = await requireTelegram().sendMessage(chatId, text, telegramReplyToMessageId ? { replyToMessageId: telegramReplyToMessageId } : undefined);
         injectSyntheticEvent(chatId, sent, telegramReplyToMessageId);
         return sent;
       }
@@ -435,7 +450,7 @@ const main = async () => {
         captionParseMode: i === 0 && htmlCaption ? 'HTML' as const : undefined,
       }));
 
-      const sentMessages = await telegram.sendMediaGroup(chatId, media, telegramReplyToMessageId ? { replyToMessageId: telegramReplyToMessageId } : undefined);
+      const sentMessages = await requireTelegram().sendMediaGroup(chatId, media, telegramReplyToMessageId ? { replyToMessageId: telegramReplyToMessageId } : undefined);
 
       // Inject synthetic events for each sent message in the group
       for (const sent of sentMessages) {
@@ -452,8 +467,8 @@ const main = async () => {
     getChatTitle: chatId => pipeline.getIC(chatId)?.chatTitle,
     runtimeConfig,
     loadMessageAttachments: (chatId, messageId) => loadMessageAttachments(db, chatId, messageId),
-    downloadFile: fileId => telegram.bot.downloadFile(fileId),
-    downloadMessageMedia: telegram.userbot
+    downloadFile: fileId => requireTelegram().bot.downloadFile(fileId),
+    downloadMessageMedia: telegram?.userbot
       ? (chatId, messageId) => telegram.userbot!.downloadMessageMedia(chatId, messageId)
       : undefined,
     resolveModel: name => resolveModel(config, name),
@@ -480,7 +495,7 @@ const main = async () => {
     if (rc) driver.handleEvent(chatId, rc);
   }
 
-  telegram.onMessage(msg => {
+  telegram?.onMessage(msg => {
     // Service messages (join/leave/rename/pin/etc.) — route to service event path
     if (isServiceMessage(msg)) {
       const event = adaptServiceEvent(msg);
@@ -521,7 +536,7 @@ const main = async () => {
     }
   });
 
-  telegram.onMessageEdit(edit => {
+  telegram?.onMessageEdit(edit => {
     logger.withFields({
       chatId: edit.chatId,
       messageId: edit.messageId,
@@ -559,7 +574,7 @@ const main = async () => {
     }
   });
 
-  telegram.onMessageDelete(del => {
+  telegram?.onMessageDelete(del => {
     logger.withFields({
       chatId: del.chatId ?? 'unknown',
       messageIds: del.messageIds,
@@ -645,7 +660,7 @@ const main = async () => {
     backgroundTaskManager.shutdown();
     driver.stop();
     await Promise.all([
-      telegram.stop(),
+      telegram?.stop(),
       slack?.stop(),
     ]);
     process.exit(0);
@@ -655,14 +670,14 @@ const main = async () => {
   process.on('SIGTERM', () => void shutdown());
 
   await Promise.all([
-    telegram.start(),
+    telegram?.start(),
     slack?.start(),
   ]);
   logger.log('Cahciua is running');
 
   // Post-startup: backfill animationHash for historical events that lack it.
   // Runs after telegram.start() so download functions are available.
-  if (animationToTextChatIds.size > 0) {
+  if (telegram && animationToTextChatIds.size > 0) {
     const backfillLog = logger.withContext('animation-backfill');
     for (const chatId of animationToTextChatIds) {
       const compaction = loadCompaction(db, chatId);
@@ -732,7 +747,7 @@ const main = async () => {
   }
   // Post-startup: resolve custom emoji descriptions for historical events.
   // Runs after telegram.start() so Bot API (getCustomEmojiStickers) is available.
-  if (customEmojiToTextChatIds.size > 0) {
+  if (telegram && customEmojiToTextChatIds.size > 0) {
     for (const chatId of customEmojiToTextChatIds) {
       const compaction = loadCompaction(db, chatId);
       const events = loadEvents(db, chatId, compaction?.newCursorMs);

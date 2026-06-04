@@ -109,12 +109,12 @@ const BackgroundTasksSchema = v.optional(v.object({
 
 const ConfigSchema = v.object({
   models: v.record(v.string(), v.object(llmEndpointEntries)),
-  telegram: v.object({
+  telegram: v.optional(v.object({
     botToken: v.string(),
     apiId: v.optional(v.number()),
     apiHash: v.optional(v.string()),
     session: v.optional(v.string(), ''),
-  }),
+  })),
   slack: v.optional(v.object({
     botToken: v.string(),
     appToken: v.string(),

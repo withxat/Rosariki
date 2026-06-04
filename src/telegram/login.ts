@@ -15,7 +15,7 @@ const main = async () => {
 
   const config = loadConfig();
 
-  if (config.telegram.apiId == null || config.telegram.apiHash == null)
+  if (config.telegram?.apiId == null || config.telegram.apiHash == null)
     throw new Error('telegram.apiId and telegram.apiHash are required for login');
 
   const existingSession = loadSession(config.telegram.session ?? '');

@@ -13,11 +13,13 @@ models:
     # timeoutSec: 60                 # optional: abort requests that stream for too long
     # maxImagesAllowed: 10     # optional: Gemini Flash allows max 10 images
 
-telegram:
-  botToken: ""
-  apiId: 0
-  apiHash: ""
-  session: ""
+# Optional Telegram integration. Required when any configured chat uses
+# platform: "telegram" (the default platform when omitted).
+# telegram:
+#   botToken: ""
+#   apiId: 0
+#   apiHash: ""
+#   session: ""
 
 # Optional Slack Socket Mode integration.
 # Create a Slack app with Socket Mode enabled, subscribe it to message events,

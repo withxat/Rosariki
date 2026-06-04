@@ -82,7 +82,7 @@ grammY (Bot API) handles user messages and replies. gramjs (User API) handles hi
 
 ### Configured chat residency
 
-`chats` config = in-memory residency whitelist. Each chat can set `platform: "telegram"` (default) or `platform: "slack"`. Unconfigured chats still persist archival data (Telegram: `events` + `messages`; Slack: canonical `events` only), then stop before hydration/Projection/Rendering/Driver/compaction. Startup seeds Telegram's known-chat filter from the full events table so historical unconfigured groups can still receive live persistence; cold-start replay only rebuilds IC/RC for chats present in config.
+`chats` config = in-memory residency whitelist. Each chat can set `platform: "telegram"` (default) or `platform: "slack"`. Top-level `telegram` / `slack` config blocks are optional until at least one configured chat uses that platform (Telegram chats require `telegram.botToken`; Slack chats require `slack.botToken` + `slack.appToken`). Unconfigured chats still persist archival data (Telegram: `events` + `messages`; Slack: canonical `events` only), then stop before hydration/Projection/Rendering/Driver/compaction. When Telegram is enabled, startup seeds its known-chat filter from the full events table so historical unconfigured groups can still receive live persistence; cold-start replay only rebuilds IC/RC for chats present in config.
 
 ### IC mutation semantics
 
