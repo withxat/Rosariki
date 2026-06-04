@@ -45,7 +45,7 @@ export const createDriver = (config: DriverConfig, deps: {
   loadTurnResponses: (chatId: string, afterMs?: number) => Promise<TurnResponseV2[]>;
   persistTurnResponse: (chatId: string, tr: TurnResponseV2) => Promise<void>;
   persistProbeResponse: (chatId: string, probe: ProbeResponseV2) => Promise<void>;
-  sendMessage: (chatId: string, text: string, replyToMessageId?: number, attachments?: SendMessageAttachment[]) => Promise<{ messageId: number; date: number }>;
+  sendMessage: (chatId: string, text: string, replyToMessageId?: string, attachments?: SendMessageAttachment[]) => Promise<{ messageId: string | number; date: number }>;
   loadCompaction: (chatId: string) => CompactionSessionMeta | null;
   loadLastProbeTime: (chatId: string) => number;
   persistCompaction: (chatId: string, meta: CompactionSessionMeta) => void;
@@ -184,7 +184,7 @@ export const createDriver = (config: DriverConfig, deps: {
                 replyTo,
                 attachments: attachments?.length ?? 0,
               }).log('send_message tool called');
-              const sent = await deps.sendMessage(chatId, text, replyTo ? Number(replyTo) : undefined, attachments);
+              const sent = await deps.sendMessage(chatId, text, replyTo, attachments);
               return { messageId: String(sent.messageId) };
             });
 

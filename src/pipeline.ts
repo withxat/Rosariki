@@ -10,7 +10,7 @@ export type { PipelineEvent } from './projection';
 
 // Per-chat IC/RC state manager. Encapsulates the Projection → Rendering
 // pipeline, debug dumping, and diff logging.
-export const createPipeline = (renderParams: RenderParams) => {
+export const createPipeline = (renderParams: RenderParams | ((chatId: string) => RenderParams)) => {
   const logger = useLogger('pipeline');
   const renderLogger = useLogger('rendering');
 
@@ -20,8 +20,9 @@ export const createPipeline = (renderParams: RenderParams) => {
 
   // Compute effective RenderParams for a chat, merging per-chat cursor with base params.
   const effectiveParams = (chatId: string): RenderParams => {
+    const baseParams = typeof renderParams === 'function' ? renderParams(chatId) : renderParams;
     const cursor = cursors.get(chatId);
-    return cursor != null ? { ...renderParams, compactCursorMs: cursor } : renderParams;
+    return cursor != null ? { ...baseParams, compactCursorMs: cursor } : baseParams;
   };
 
   const logRendering = (sessionId: string, oldRC: RenderedContext | undefined, newRC: RenderedContext) => {

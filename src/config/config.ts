@@ -30,6 +30,7 @@ const RuntimeSchema = v.object({
 // --- Chat-level config schemas ---
 
 const ChatConfigSchema = v.object({
+  platform: v.optional(v.picklist(['telegram', 'slack']), 'telegram'),
   model: v.optional(v.string(), 'primary'),
   compaction: v.optional(v.object({
     maxContextEstTokens: v.optional(v.number(), 200000),
@@ -66,6 +67,7 @@ const ChatConfigSchema = v.object({
 
 // Per-chat overrides: all fields optional, no defaults
 const ChatOverrideSchema = v.optional(v.partial(v.object({
+  platform: v.picklist(['telegram', 'slack']),
   model: v.string(),
   compaction: v.partial(v.object({
     maxContextEstTokens: v.number(),
@@ -113,6 +115,12 @@ const ConfigSchema = v.object({
     apiHash: v.optional(v.string()),
     session: v.optional(v.string(), ''),
   }),
+  slack: v.optional(v.object({
+    botToken: v.string(),
+    appToken: v.string(),
+    signingSecret: v.optional(v.string()),
+    botUserId: v.optional(v.string()),
+  })),
   database: v.optional(v.object({
     path: v.optional(v.string(), './data/cahciua.db'),
   }), {}),
@@ -138,6 +146,7 @@ export interface BackgroundTasksConfig {
 }
 
 export interface ResolvedChatConfig {
+  platform: 'telegram' | 'slack';
   primaryModel: LlmEndpoint;
   primaryApiFormat: ProviderFormat;
   compaction: CompactionConfig;
@@ -191,6 +200,7 @@ export const resolveChatConfig = (config: Config, chatId: string): ResolvedChatC
   const primaryApiFormat: ProviderFormat = primaryModel.apiFormat ?? 'openai-chat';
 
   return {
+    platform: merged.platform,
     primaryModel,
     primaryApiFormat,
     compaction: {

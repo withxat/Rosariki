@@ -6,7 +6,7 @@ Reference for contributors. Improve code when you touch it; avoid one-off patter
 
 ## What Is Cahciua
 
-Telegram group chat bot built on the **Deterministic Context Pipeline (DCP)**:
+Group chat bot (Telegram + basic Slack) built on the **Deterministic Context Pipeline (DCP)**:
 
 1. **Adaptation** (`src/adaptation/`): Platform Event → `CanonicalIMEvent` (anti-corruption).
 2. **Projection** (`src/projection/`): `IC' = reduce(IC, event)` — pure, Immer-backed.
@@ -21,7 +21,7 @@ See `docs/dcp-design.md` for architecture rationale.
 
 ## Tech Stack
 
-Node ≥22, TypeScript, pnpm. Telegram: grammY (Bot API) + gramjs (MTProto). DB: better-sqlite3 + Drizzle. State: Immer. Reactivity: alien-signals. Validation: Valibot. Prompts: `@velin-dev/core` (all in `prompts/*.velin.md` — never hardcode prompt strings). Logging: `@guiiai/logg`. Tests: Vitest. Media: sharp, ffmpeg-static + ffprobe-static, lottie-frame (needs system `libpng-dev` + `librlottie-dev`).
+Node ≥22, TypeScript, pnpm. Telegram: grammY (Bot API) + gramjs (MTProto). Slack: @slack/bolt + @slack/web-api (Socket Mode). DB: better-sqlite3 + Drizzle. State: Immer. Reactivity: alien-signals. Validation: Valibot. Prompts: `@velin-dev/core` (all in `prompts/*.velin.md` — never hardcode prompt strings). Logging: `@guiiai/logg`. Tests: Vitest. Media: sharp, ffmpeg-static + ffprobe-static, lottie-frame (needs system `libpng-dev` + `librlottie-dev`).
 
 ## Commands
 
@@ -37,15 +37,17 @@ src/
 ├── driver/       LLM orchestration, tool loop, compaction, probe gate, format conversion.
 ├── db/           Drizzle schema + persistence. Schema is the source of truth.
 ├── telegram/     Bot+userbot, ingress queue, media-to-text transforms, frame extraction.
+├── slack/        Socket Mode ingress, adapter → canonical events, outbound messages/files.
 ├── config/       YAML loader (Valibot).
 ├── http.ts       fetch wrapper with credential redaction (registerHttpSecret).
 ├── pipeline.ts   Per-chat IC/RC state manager.
+├── startup.ts    Configured replay whitelist / in-memory residency checks.
 └── index.ts      Wiring shell.
 prompts/          All velin templates.
 docs/             Design docs (not prompts).
 ```
 
-**Type ownership**: platform types (`Attachment`, `MessageEntity`, ...) live in `src/telegram/message/types.ts`. Canonical types (`CanonicalIMEvent`, `ContentNode`, ...) live in `src/adaptation/types.ts`. All IDs in canonical types are strings. DB schema imports platform types for JSON column annotations — never the other way around.
+**Type ownership**: Telegram platform types (`Attachment`, `MessageEntity`, ...) live in `src/telegram/message/types.ts`. Slack platform types live in `src/slack/types.ts`. Canonical types (`CanonicalIMEvent`, `ContentNode`, ...) live in `src/adaptation/types.ts`. All IDs in canonical types are strings. `db/schema.ts` imports Telegram attachment metadata for the legacy `messages` table only; Slack persists through canonical `events`. Never define platform types in the DB layer.
 
 **Imports**: relative paths only. No tsconfig aliases.
 
@@ -80,7 +82,7 @@ grammY (Bot API) handles user messages and replies. gramjs (User API) handles hi
 
 ### Configured chat residency
 
-`chats` config = in-memory residency whitelist. Unconfigured chats still persist `events` + `messages` (so the historical archive stays complete) but stop before hydration/Projection/Rendering/Driver.
+`chats` config = in-memory residency whitelist. Each chat can set `platform: "telegram"` (default) or `platform: "slack"`. Unconfigured chats still persist archival data (Telegram: `events` + `messages`; Slack: canonical `events` only), then stop before hydration/Projection/Rendering/Driver/compaction. Startup seeds Telegram's known-chat filter from the full events table so historical unconfigured groups can still receive live persistence; cold-start replay only rebuilds IC/RC for chats present in config.
 
 ### IC mutation semantics
 

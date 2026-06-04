@@ -19,6 +19,16 @@ telegram:
   apiHash: ""
   session: ""
 
+# Optional Slack Socket Mode integration.
+# Create a Slack app with Socket Mode enabled, subscribe it to message events,
+# and grant bot scopes such as app_mentions:read, channels:history,
+# groups:history, chat:write, files:write, and users:read.
+# slack:
+#   botToken: ""       # xoxb-...
+#   appToken: ""       # xapp-..., requires connections:write
+#   signingSecret: ""  # optional for Socket Mode, kept for compatibility
+#   botUserId: ""      # optional; fetched with auth.test when omitted
+
 database:
   path: "./data/cahciua.db"
 
@@ -69,3 +79,5 @@ chats:
   # "751414718":                   # per-chat partial override (deep-merged with default)
   #   model: "secondary"
   # "-1002173016093": {}           # whitelisted with all defaults
+  # "C0123456789":                  # Slack channel ID
+  #   platform: "slack"
