@@ -8,6 +8,7 @@ import { renderLateBindingPrompt, renderSystemPrompt } from './prompt';
 import { createRunner } from './runner';
 import { collectRecentSendMessageAssessments, renderRecentSendMessageHumanLikenessXml } from './send-message-human-likeness';
 import { computeSlackReplyPlacement, renderSlackReplyPlacementXml } from './slack-reply-placement';
+import { createCancelScheduledWakeTool, createListScheduledWakesTool, createScheduleWakeTool, type ScheduleToolDeps } from './schedule-tools';
 import { createBashTool, createAttachmentDownloader, createChatInteractionTools, createDownloadFileTool, createKillTaskTool, createReadImageTool, createReadTaskOutputTool, createSendMessageTool, createWebSearchTool } from './tools';
 import type { CahciuaTool, ChatInteractionDeps, SendMessageAttachment } from './tools';
 import type { CompactionSessionMeta, DriverConfig, LlmEndpoint, ProbeResponseV2, ProviderFormat, TurnResponseV2 } from './types';
@@ -64,6 +65,7 @@ export const createDriver = (config: DriverConfig, deps: {
     getActiveTasks: (sessionId: string) => ActiveTaskInfo[];
     readTaskOutput: (taskId: number, offset?: number, limit?: number) => Promise<{ content: string; totalLines: number; truncated: boolean } | { error: string }>;
   };
+  schedule?: (chatId: string) => ScheduleToolDeps;
   logger: Logger;
 }) => {
   const { logger } = deps;
@@ -256,6 +258,13 @@ export const createDriver = (config: DriverConfig, deps: {
             tools.push(createKillTaskTool(taskId => deps.backgroundTask.killTask(taskId)));
             tools.push(createReadTaskOutputTool((taskId, offset, limit) => deps.backgroundTask.readTaskOutput(taskId, offset, limit)));
 
+            const scheduleDeps = deps.schedule?.(chatId);
+            if (scheduleDeps) {
+              tools.push(createScheduleWakeTool(scheduleDeps));
+              tools.push(createListScheduledWakesTool(scheduleDeps));
+              tools.push(createCancelScheduledWakeTool(scheduleDeps));
+            }
+
             const system = await renderSystemPrompt({
               currentChannel: 'slack',
               modelName: chatConfig.primaryModel.model,
@@ -270,6 +279,7 @@ export const createDriver = (config: DriverConfig, deps: {
               (seg.mentionsMe || seg.repliesToMe || seg.isRuntimeEvent) ? Math.max(max, seg.receivedAtMs) : max, 0);
             const isMentioned = rcVal.some(seg => seg.mentionsMe && seg.receivedAtMs > lastProcessedMs());
             const isReplied = rcVal.some(seg => seg.repliesToMe && seg.receivedAtMs > lastProcessedMs());
+            const isScheduledWake = rcVal.some(seg => seg.isScheduledWake && seg.receivedAtMs > lastProcessedMs());
             const recentSendMessageHumanLikenessXml = renderRecentSendMessageHumanLikenessXml(
               collectRecentSendMessageAssessments(await deps.loadTurnResponses(chatId)),
             );
@@ -281,7 +291,7 @@ export const createDriver = (config: DriverConfig, deps: {
             const lateBindingParams = {
               timeNow: localTimeNow(),
               currentChannel: 'slack',
-              isMentioned, isReplied,
+              isMentioned, isReplied, isScheduledWake,
               slackReplyPlacementXml,
               slackEmojiCatalogXml: deps.getSlackEmojiCatalogXml?.(),
               recentSendMessageHumanLikenessXml,

@@ -12,6 +12,7 @@ const props = defineProps({
   slackEmojiCatalogXml: { type: String, default: '' },
   recentSendMessageHumanLikenessXml: { type: String, default: '' },
   isInterrupted: { type: Boolean, default: false },
+  isScheduledWake: { type: Boolean, default: false },
   activeBackgroundTasks: { type: Array, default: () => [] },
 })
 
@@ -56,6 +57,11 @@ Messages inside a thread carry `in-thread="true"` on the `<message>` element. Fo
 
 **HARD RULE — no agreement, no echoing.** Unless someone has explicitly asked whether you agree, you are STRICTLY FORBIDDEN from sending any message whose primary content is agreement, validation, or restatement of what someone just said. 对/对啊/确实/没错/说得对/+1/同意/我也这么觉得/yeah/true/exactly/agreed/+1/same — these and anything like them are banned as standalone or near-standalone messages. Before calling `send_message`, mentally strip every agreement/acknowledgement word from your draft; if nothing substantive remains (no new fact, no distinct angle, no question), **do not call `send_message`** — stay silent. Silence beats filler every time. Agreement is allowed only as a lead-in to genuine new content in the same message, or when directly asked.
 
+<template v-if="isScheduledWake">
+
+A **scheduled wake** just fired. Read the `<runtime-event type="scheduled_wake">` instruction in context — compose fresh content and act now (`send_message` or other tools). The instruction is intent only, not pre-written message text.
+
+</template>
 <template v-if="isInterrupted">
 
 Your previous tool call sequence was interrupted by new messages. Review the new messages, then continue with your intended tool calls if still appropriate.

@@ -220,8 +220,17 @@ const renderSystemEvent = (event: ICSystemEvent, contactNames?: Map<string, stri
 
 const renderRuntimeEvent = (event: ICRuntimeEvent): string => {
   const t = formatTimestamp(event.timestampSec, event.utcOffsetMin);
+  if (event.kind === 'scheduled_wake') {
+    const attrs = [
+      'type="scheduled_wake"',
+      `schedule-id="${event.scheduleId}"`,
+      `t="${t}"`,
+    ];
+    return `<runtime-event ${attrs.join(' ')}>\n<instruction>${escapeXml(event.instruction)}</instruction>\n<note>Compose and send the message now (send_message or other tools). This is not pre-written text — write fresh content that fulfills the instruction.</note>\n</runtime-event>`;
+  }
+
   const attrs = [
-    `type="${event.kind}"`,
+    'type="task_completed"',
     `task-id="${event.taskId}"`,
     `task-type="${escapeXml(event.taskType)}"`,
     `t="${t}"`,
@@ -259,7 +268,12 @@ export const render = (ic: IntermediateContext, params: RenderParams = {}): Rend
       });
     } else if (node.type === 'runtime_event') {
       const content = [{ type: 'text' as const, text: renderRuntimeEvent(node) }];
-      segments.push({ receivedAtMs: node.receivedAtMs, content, isRuntimeEvent: true });
+      segments.push({
+        receivedAtMs: node.receivedAtMs,
+        content,
+        isRuntimeEvent: true,
+        ...(node.kind === 'scheduled_wake' && { isScheduledWake: true }),
+      });
     } else {
       const content = [{ type: 'text' as const, text: renderSystemEvent(node, params.contactNames) }];
       segments.push({ receivedAtMs: node.receivedAtMs, content });

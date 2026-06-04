@@ -6,7 +6,8 @@ import { shellTaskFactory } from './background-task/shell';
 import { getChatIds, loadConfig, resolveBackgroundTasks, resolveChatConfig, resolveModel, resolveRuntime } from './config/config';
 import { setupLogger, useLogger } from './config/logger';
 import { loadContacts } from './contacts';
-import { createDatabase, loadCompaction, loadEvents, loadImageAltTextByHash, loadKnownChatIds, loadLastProbeTime, loadLatestMessageContent, loadMessageAttachments, loadTurnResponses, migrateV1ToV2, persistCompaction, persistEvent, persistImageAltText, persistProbeResponse, persistTurnResponse, runMigrations } from './db';
+import { cancelScheduledWake, createDatabase, insertScheduledWake, listScheduledWakesForChat, loadCompaction, loadEvents, loadImageAltTextByHash, loadKnownChatIds, loadLastProbeTime, loadLatestMessageContent, loadMessageAttachments, loadTurnResponses, migrateV1ToV2, persistCompaction, persistEvent, persistImageAltText, persistProbeResponse, persistTurnResponse, runMigrations } from './db';
+import { createScheduledWakeScheduler } from './scheduler';
 import { createDriver } from './driver';
 import { computeThumbnailHash, createImageToTextResolver } from './media/image-to-text';
 import { createPipeline } from './pipeline';
@@ -266,10 +267,36 @@ const main = async () => {
       getActiveTasks: sessionId => backgroundTaskManager.getActiveTasks(sessionId),
       readTaskOutput: (taskId, offset, limit) => backgroundTaskManager.readTaskOutput(taskId, offset, limit),
     },
+    schedule: chatId => ({
+      createSchedule: ({ runAtMs, instruction, repeatEverySec }) =>
+        insertScheduledWake(db, {
+          chatId,
+          runAtMs,
+          instruction,
+          repeatIntervalMs: repeatEverySec != null ? repeatEverySec * 1000 : undefined,
+        }),
+      listSchedules: () => listScheduledWakesForChat(db, chatId).map(row => ({
+        id: row.id,
+        run_at_ms: row.runAtMs,
+        instruction: row.instruction,
+        repeat_every_sec: row.repeatIntervalMs != null ? Math.round(row.repeatIntervalMs / 1000) : null,
+        created_at_ms: row.createdAtMs,
+      })),
+      cancelSchedule: scheduleId => cancelScheduledWake(db, chatId, scheduleId),
+    }),
     logger,
   });
 
   driverRef.handleEvent = driver.handleEvent;
+
+  createScheduledWakeScheduler({
+    db,
+    configuredChatIds,
+    persistEvent: event => persistEvent(db, event),
+    pushPipelineEvent: (chatId, event) => isConfiguredChat(configuredChatIds, chatId) ? pipeline.pushEvent(chatId, event) : undefined,
+    handleDriverEvent: (chatId, rc) => driver.handleEvent(chatId, rc),
+    logger,
+  });
 
   logger.withFields({ chatIds }).log('Driver initialized');
 

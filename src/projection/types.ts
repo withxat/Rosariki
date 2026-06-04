@@ -113,7 +113,7 @@ export type ICSystemEvent =
   | ICMessagePinnedEvent
   | ICMessageReactionEvent;
 
-export interface ICRuntimeEvent {
+export interface ICRuntimeTaskCompleted {
   type: 'runtime_event';
   kind: 'task_completed';
   receivedAtMs: number;
@@ -125,6 +125,18 @@ export interface ICRuntimeEvent {
   finalSummary: string;
   hasFullOutput: boolean;
 }
+
+export interface ICRuntimeScheduledWake {
+  type: 'runtime_event';
+  kind: 'scheduled_wake';
+  receivedAtMs: number;
+  timestampSec: number;
+  utcOffsetMin: number;
+  scheduleId: number;
+  instruction: string;
+}
+
+export type ICRuntimeEvent = ICRuntimeTaskCompleted | ICRuntimeScheduledWake;
 
 export type ICNode = ICMessage | ICSystemEvent | ICRuntimeEvent;
 

@@ -27,14 +27,16 @@ export const persistEvent = (db: DB, event: PipelineEvent) => {
   };
 
   if (event.type === 'runtime') {
-    const runtimeData: RuntimeEventData = {
-      kind: event.kind,
-      taskId: event.taskId,
-      taskType: event.taskType,
-      intention: event.intention,
-      finalSummary: event.finalSummary,
-      hasFullOutput: event.hasFullOutput,
-    };
+    const runtimeData: RuntimeEventData = event.kind === 'scheduled_wake'
+      ? { kind: 'scheduled_wake', scheduleId: event.scheduleId, instruction: event.instruction }
+      : {
+        kind: 'task_completed',
+        taskId: event.taskId,
+        taskType: event.taskType,
+        intention: event.intention,
+        finalSummary: event.finalSummary,
+        hasFullOutput: event.hasFullOutput,
+      };
     db.insert(events).values({ ...base, runtimeData }).run();
   } else if (event.type === 'delete') {
     db.insert(events).values({
@@ -136,13 +138,24 @@ const reconstructServiceEvent = (row: EventRow): CanonicalServiceEvent => {
 
 const reconstructRuntimeEvent = (row: EventRow): RuntimeEvent => {
   const data = row.runtimeData!;
-  return {
-    type: 'runtime',
-    kind: data.kind,
+  const base = {
+    type: 'runtime' as const,
     chatId: row.chatId,
     receivedAtMs: row.receivedAtMs,
     timestampSec: row.timestampSec,
     utcOffsetMin: row.utcOffsetMin,
+  };
+  if (data.kind === 'scheduled_wake') {
+    return {
+      ...base,
+      kind: 'scheduled_wake',
+      scheduleId: data.scheduleId,
+      instruction: data.instruction,
+    };
+  }
+  return {
+    ...base,
+    kind: 'task_completed',
     taskId: data.taskId,
     taskType: data.taskType,
     intention: data.intention,

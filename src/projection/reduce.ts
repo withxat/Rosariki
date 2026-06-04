@@ -1,6 +1,6 @@
 import { enableMapSet, produce } from 'immer';
 
-import type { ICMessage, ICRuntimeEvent, ICSystemEvent, ICUserState, IntermediateContext } from './types';
+import type { ICMessage, ICSystemEvent, ICUserState, IntermediateContext } from './types';
 import { contentToPlainText } from '../adaptation';
 import type {
   CanonicalDeleteEvent,
@@ -179,19 +179,30 @@ const reduceService = (draft: IntermediateContext, event: CanonicalServiceEvent)
 };
 
 const reduceRuntime = (draft: IntermediateContext, event: RuntimeEvent) => {
-  const node: ICRuntimeEvent = {
-    type: 'runtime_event',
-    kind: event.kind,
+  const base = {
+    type: 'runtime_event' as const,
     receivedAtMs: event.receivedAtMs,
     timestampSec: event.timestampSec,
     utcOffsetMin: event.utcOffsetMin,
-    taskId: event.taskId,
-    taskType: event.taskType,
-    intention: event.intention,
-    finalSummary: event.finalSummary,
-    hasFullOutput: event.hasFullOutput,
   };
-  draft.nodes.push(node);
+  if (event.kind === 'scheduled_wake') {
+    draft.nodes.push({
+      ...base,
+      kind: 'scheduled_wake',
+      scheduleId: event.scheduleId,
+      instruction: event.instruction,
+    });
+  } else {
+    draft.nodes.push({
+      ...base,
+      kind: 'task_completed',
+      taskId: event.taskId,
+      taskType: event.taskType,
+      intention: event.intention,
+      finalSummary: event.finalSummary,
+      hasFullOutput: event.hasFullOutput,
+    });
+  }
 };
 
 export const reduce = (ic: IntermediateContext, event: PipelineEvent): IntermediateContext =>

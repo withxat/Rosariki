@@ -75,6 +75,14 @@ Every `CanonicalIMEvent` carries:
 
 `chats` config = in-memory residency whitelist (Slack channel IDs). Requires top-level `slack.botToken` + `slack.appToken`. Unconfigured channels are not loaded into IC/RC/Driver on cold start.
 
+### Per-channel context (no cross-channel memory)
+
+Each Slack channel ID (`chatId`) has its own IC/RC, `events`, TRs, compactions, probe history, and driver scope. **`contacts` is global** (display names only). Conversation memory does **not** span channels — the model in channel A cannot see channel B unless you add a separate global-memory layer.
+
+### Scheduled wakes (model writes at fire time)
+
+`schedule_wake` / `list_scheduled_wakes` / `cancel_scheduled_wake` persist rows in `scheduled_wakes` (per channel). `src/scheduler/` polls due rows (~15s), emits a `runtime` event `kind: scheduled_wake` with an **instruction** (intent), then the primary model composes and sends via tools — not pre-stored message text. Repeating schedules use `repeat_every_sec` (minimum 60s). Scheduled wakes skip the probe gate (`isRuntimeEvent`). One-shot rows are disabled after fire; repeating rows advance `run_at_ms`.
+
 ### IC mutation semantics
 
 - **In-place** (edit, delete): mutate existing IC nodes with marks (`editedAtSec`, `deleted: true`). Costs KV cache from that point. Acceptable for infrequent recent edits.

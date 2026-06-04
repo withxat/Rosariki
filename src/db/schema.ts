@@ -202,6 +202,20 @@ export const imageAltTexts = sqliteTable('image_alt_texts', {
   uniqueIndex('image_alt_texts_hash_idx').on(table.imageHash),
 ]);
 
+export const scheduledWakes = sqliteTable('scheduled_wakes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  chatId: text('chat_id').notNull(),
+  runAtMs: integer('run_at_ms').notNull(),
+  instruction: text('instruction').notNull(),
+  repeatIntervalMs: integer('repeat_interval_ms'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  createdAtMs: integer('created_at_ms').notNull(),
+  lastFiredAtMs: integer('last_fired_at_ms'),
+}, table => [
+  index('scheduled_wakes_run_at_idx').on(table.runAtMs),
+  index('scheduled_wakes_chat_id_idx').on(table.chatId),
+]);
+
 export const backgroundTasks = sqliteTable('background_tasks', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   sessionId: text('session_id').notNull(),

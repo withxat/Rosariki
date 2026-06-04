@@ -40,6 +40,7 @@ export interface RenderedContextSegment {
   // Segment is a runtime event (e.g. background task completion). These bypass
   // the probe gate — the bot always responds to runtime notifications.
   isRuntimeEvent?: boolean;
+  isScheduledWake?: boolean;
 }
 
 export type RenderedContext = RenderedContextSegment[];
