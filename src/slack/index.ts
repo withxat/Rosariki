@@ -24,6 +24,7 @@ import { createEventBus } from '../event-bus'
 import { registerHttpSecret } from '../http'
 import { generateThumbnail } from '../media/thumbnail'
 import { catalogViewFromCache, loadSlackEmojiCache, renderSlackEmojiCatalogXml } from './emoji-catalog'
+import { markdownToMrkdwn } from './markdown-to-mrkdwn'
 
 export interface SlackManagerOptions {
 	appToken: string
@@ -388,10 +389,11 @@ export function createSlackManager(options: SlackManagerOptions, logger: Logger)
 	}
 
 	const sendMessage = async (channel: string, text: string, threadTs?: string): Promise<SlackSentMessage> => {
+		const mrkdwnText = markdownToMrkdwn(text)
 		const sent = await app.client.chat.postMessage({
 			channel,
 			mrkdwn: true,
-			text,
+			text: mrkdwnText,
 			thread_ts: threadTs,
 		})
 		const ts = sent.ts ?? sent.message?.ts
@@ -412,6 +414,7 @@ export function createSlackManager(options: SlackManagerOptions, logger: Logger)
 	): Promise<SlackSentMessage> => {
 		if (files.length === 0)
 			return await sendMessage(channel, initialComment ?? '', threadTs)
+		const mrkdwnComment = initialComment ? markdownToMrkdwn(initialComment) : undefined
 		await app.client.filesUploadV2({
 			channel_id: channel,
 			file_uploads: files.map(file => ({
@@ -419,11 +422,11 @@ export function createSlackManager(options: SlackManagerOptions, logger: Logger)
 				filename: file.fileName,
 				title: file.title ?? file.fileName,
 			})),
-			initial_comment: initialComment,
+			initial_comment: mrkdwnComment,
 			thread_ts: threadTs,
 		})
-		const fallback = initialComment && initialComment !== ''
-			? initialComment
+		const fallback = mrkdwnComment && mrkdwnComment !== ''
+			? mrkdwnComment
 			: files.map(file => file.fileName ?? 'attachment').join(', ')
 		return {
 			date: Math.floor(Date.now() / 1000),
@@ -444,9 +447,10 @@ export function createSlackManager(options: SlackManagerOptions, logger: Logger)
 	}
 
 	const updateMessage = async (channel: string, messageTs: string, text: string): Promise<SlackSentMessage> => {
+		const mrkdwnText = markdownToMrkdwn(text)
 		const updated = await app.client.chat.update({
 			channel,
-			text,
+			text: mrkdwnText,
 			ts: messageTs,
 		})
 		const ts = updated.ts ?? messageTs

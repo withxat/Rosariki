@@ -145,6 +145,10 @@ Single `emoji.list({ include_categories: true })` cache (5 min TTL) shared by la
 
 Driver registers Slack-only tools so large workspace metadata enters context only when requested: `slack_read_channel_info` (`conversations.info`), `slack_read_channel_members` (`conversations.members`), `slack_read_user_profile` (`users.info` + `users.profile.get`), `slack_list_emoji`, `slack_read_canvas` (`canvases.sections.lookup`). Channel tools use the current `chatId` (raw Slack channel ID). User IDs accept `U…` or `slack:U…`.
 
+### Outbound Markdown → mrkdwn
+
+`send_message` / `update_message` tool args use Markdown (primary-system prompt). `src/slack/markdown-to-mrkdwn.ts` converts to legacy Slack mrkdwn via `slackify-markdown` at the `chat.postMessage` / `chat.update` / file-upload comment boundary (`||spoiler||` → italic; `__underline__` → bold). Inbound parsing remains `parseSlackContent()` in `adapter.ts`.
+
 ### Slack thread vs channel placement
 
 Driver computes `computeSlackReplyPlacement()` from new RC segments (`mentionsMe` / `repliesToMe`, `messageId`, `replyToMessageId`) and injects `<slack-reply-placement>` into late-binding. Rendering sets `in-thread="true"` on `<message>` when the event was posted inside a thread. The model still omits `reply_to` only when intentionally broadcasting to the channel — not rewritten at send time.
