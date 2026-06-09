@@ -1,161 +1,164 @@
-import type { CanonicalAttachment, CanonicalForwardInfo, CanonicalUser, ContentNode } from '../adaptation/types';
+import type { CanonicalAttachment, CanonicalForwardInfo, CanonicalUser, ContentNode } from '../adaptation/types'
 
 export interface ICMessage {
-  type: 'message';
-  messageId: string;
-  sender?: CanonicalUser;
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  content: ContentNode[];
-  replyToMessageId?: string;
-  replyToSender?: CanonicalUser;
-  replyToPreview?: string;
-  replyToContent?: ContentNode[];
-  forwardInfo?: CanonicalForwardInfo;
-  attachments: CanonicalAttachment[];
-  editedAtSec?: number;
-  editUtcOffsetMin?: number;
-  deleted?: boolean;
-  isSelfSent?: boolean;
+	attachments: CanonicalAttachment[]
+	content: ContentNode[]
+	deleted?: boolean
+	editedAtSec?: number
+	editUtcOffsetMin?: number
+	forwardInfo?: CanonicalForwardInfo
+	isSelfSent?: boolean
+	messageId: string
+	receivedAtMs: number
+	replyToContent?: ContentNode[]
+	replyToMessageId?: string
+	replyToPreview?: string
+	replyToSender?: CanonicalUser
+	sender?: CanonicalUser
+	timestampSec: number
+	type: 'message'
+	utcOffsetMin: number
 }
 
 export interface ICUserRenamedEvent {
-  type: 'system_event';
-  kind: 'user_renamed';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  userId: string;
-  oldUser: CanonicalUser;
-  newUser: CanonicalUser;
+	kind: 'user_renamed'
+	newUser: CanonicalUser
+	oldUser: CanonicalUser
+	receivedAtMs: number
+	timestampSec: number
+	type: 'system_event'
+	userId: string
+	utcOffsetMin: number
 }
 
 export interface ICMembersJoinedEvent {
-  type: 'system_event';
-  kind: 'members_joined';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  actor?: CanonicalUser;
-  members: CanonicalUser[];
+	actor?: CanonicalUser
+	kind: 'members_joined'
+	members: CanonicalUser[]
+	receivedAtMs: number
+	timestampSec: number
+	type: 'system_event'
+	utcOffsetMin: number
 }
 
 export interface ICMemberLeftEvent {
-  type: 'system_event';
-  kind: 'member_left';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  actor?: CanonicalUser;
-  member: CanonicalUser;
+	actor?: CanonicalUser
+	kind: 'member_left'
+	member: CanonicalUser
+	receivedAtMs: number
+	timestampSec: number
+	type: 'system_event'
+	utcOffsetMin: number
 }
 
 export interface ICChatRenamedEvent {
-  type: 'system_event';
-  kind: 'chat_renamed';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  actor?: CanonicalUser;
-  oldTitle: string | null;
-  newTitle: string;
+	actor?: CanonicalUser
+	kind: 'chat_renamed'
+	newTitle: string
+	oldTitle: null | string
+	receivedAtMs: number
+	timestampSec: number
+	type: 'system_event'
+	utcOffsetMin: number
 }
 
 export interface ICChatPhotoChangedEvent {
-  type: 'system_event';
-  kind: 'chat_photo_changed';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  actor?: CanonicalUser;
+	actor?: CanonicalUser
+	kind: 'chat_photo_changed'
+	receivedAtMs: number
+	timestampSec: number
+	type: 'system_event'
+	utcOffsetMin: number
 }
 
 export interface ICChatPhotoDeletedEvent {
-  type: 'system_event';
-  kind: 'chat_photo_deleted';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  actor?: CanonicalUser;
+	actor?: CanonicalUser
+	kind: 'chat_photo_deleted'
+	receivedAtMs: number
+	timestampSec: number
+	type: 'system_event'
+	utcOffsetMin: number
 }
 
 export interface ICMessagePinnedEvent {
-  type: 'system_event';
-  kind: 'message_pinned';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  actor?: CanonicalUser;
-  messageId: string;
-  preview?: string;
+	actor?: CanonicalUser
+	kind: 'message_pinned'
+	messageId: string
+	preview?: string
+	receivedAtMs: number
+	timestampSec: number
+	type: 'system_event'
+	utcOffsetMin: number
 }
 
 export interface ICMessageReactionEvent {
-  type: 'system_event';
-  kind: 'message_reaction';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  actor?: CanonicalUser;
-  messageId: string;
-  reaction: string;
-  operation: 'added' | 'removed';
+	actor?: CanonicalUser
+	kind: 'message_reaction'
+	messageId: string
+	operation: 'added' | 'removed'
+	reaction: string
+	receivedAtMs: number
+	timestampSec: number
+	type: 'system_event'
+	utcOffsetMin: number
 }
 
-export type ICSystemEvent =
-  | ICUserRenamedEvent
-  | ICMembersJoinedEvent
-  | ICMemberLeftEvent
-  | ICChatRenamedEvent
-  | ICChatPhotoChangedEvent
-  | ICChatPhotoDeletedEvent
-  | ICMessagePinnedEvent
-  | ICMessageReactionEvent;
+export type ICSystemEvent
+	= | ICChatPhotoChangedEvent
+		| ICChatPhotoDeletedEvent
+		| ICChatRenamedEvent
+		| ICMemberLeftEvent
+		| ICMembersJoinedEvent
+		| ICMessagePinnedEvent
+		| ICMessageReactionEvent
+		| ICUserRenamedEvent
 
 export interface ICRuntimeTaskCompleted {
-  type: 'runtime_event';
-  kind: 'task_completed';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  taskId: number;
-  taskType: string;
-  intention?: string;
-  finalSummary: string;
-  hasFullOutput: boolean;
+	finalSummary: string
+	hasFullOutput: boolean
+	intention?: string
+	kind: 'task_completed'
+	receivedAtMs: number
+	taskId: number
+	taskType: string
+	timestampSec: number
+	type: 'runtime_event'
+	utcOffsetMin: number
 }
 
-export interface ICRuntimeScheduledWake {
-  type: 'runtime_event';
-  kind: 'scheduled_wake';
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  scheduleId: number;
-  instruction: string;
+export interface ICRuntimeScheduleTriggered {
+	instruction: string
+	kind: 'schedule_triggered'
+	receivedAtMs: number
+	scheduleId: number
+	scheduleName?: string
+	timestampSec: number
+	type: 'runtime_event'
+	utcOffsetMin: number
 }
 
-export type ICRuntimeEvent = ICRuntimeTaskCompleted | ICRuntimeScheduledWake;
+export type ICRuntimeEvent = ICRuntimeScheduleTriggered | ICRuntimeTaskCompleted
 
-export type ICNode = ICMessage | ICSystemEvent | ICRuntimeEvent;
+export type ICNode = ICMessage | ICRuntimeEvent | ICSystemEvent
 
 export interface ICUserState {
-  user: CanonicalUser;
-  firstSeenAtMs: number;
-  lastSeenAtMs: number;
-  messageCount: number;
+	firstSeenAtMs: number
+	lastSeenAtMs: number
+	messageCount: number
+	user: CanonicalUser
 }
 
 export interface IntermediateContext {
-  sessionId: string;
-  nodes: ICNode[];
-  users: Map<string, ICUserState>;
-  chatTitle?: string;
+	chatTitle?: string
+	nodes: ICNode[]
+	sessionId: string
+	users: Map<string, ICUserState>
 }
 
-export const createEmptyIC = (sessionId: string): IntermediateContext => ({
-  sessionId,
-  nodes: [],
-  users: new Map(),
-});
+export function createEmptyIC(sessionId: string): IntermediateContext {
+	return {
+		nodes: [],
+		sessionId,
+		users: new Map(),
+	}
+}

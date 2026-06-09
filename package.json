@@ -1,60 +1,53 @@
 {
-  "name": "cahciua",
-  "type": "module",
-  "version": "0.1.0",
-  "private": true,
-  "packageManager": "pnpm@10.6.2",
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
-    "build": "tsdown",
-    "lint": "eslint --cache .",
-    "lint:fix": "eslint --cache . --fix",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
-  },
-  "dependencies": {
-    "@cfworker/json-schema": "^4.1.1",
-    "@guiiai/logg": "^1.2.11",
-    "@slack/bolt": "^4.7.2",
-    "@slack/web-api": "^7.16.0",
-    "@velin-dev/core": "^0.4.1",
-    "alien-signals": "^3.1.2",
-    "better-sqlite3": "^11.7.0",
-    "diff": "^8.0.3",
-    "drizzle-orm": "^0.38.0",
-    "es-toolkit": "^1.45.1",
-    "immer": "^10.1.1",
-    "sharp": "^0.34.5",
-    "valibot": "^1.2.0",
-    "yaml": "^2.8.2"
-  },
-  "pnpm": {
-    "overrides": {
-      "esbuild": "^0.24.0"
-    }
-  },
-  "devDependencies": {
-    "@stylistic/eslint-plugin": "^2.0.0",
-    "@types/better-sqlite3": "^7.6.12",
-    "@types/node": "^22.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "drizzle-kit": "^0.30.0",
-    "eslint": "^9.0.0",
-    "eslint-import-resolver-typescript": "^3.7.0",
-    "eslint-plugin-import": "^2.31.0",
-    "node-gyp": "^12.2.0",
-    "tsdown": "^0.6.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
-  }
+	"name": "cahciua",
+	"type": "module",
+	"version": "0.1.0",
+	"private": true,
+	"packageManager": "pnpm@10.6.2",
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"scripts": {
+		"dev": "tsx watch src/index.ts",
+		"start": "tsx src/index.ts",
+		"build": "tsdown",
+		"lint": "eslint --cache .",
+		"lint:fix": "eslint --cache . --fix",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest",
+		"test:run": "vitest run",
+		"db:generate": "drizzle-kit generate",
+		"db:migrate": "drizzle-kit migrate",
+		"db:studio": "drizzle-kit studio"
+	},
+	"dependencies": {
+		"@cfworker/json-schema": "^4.1.1",
+		"@guiiai/logg": "^1.2.11",
+		"@slack/bolt": "^4.7.3",
+		"@slack/web-api": "^7.16.0",
+		"@velin-dev/core": "^0.4.1",
+		"alien-signals": "^3.2.1",
+		"better-sqlite3": "^12.10.0",
+		"chinese-days": "^1.5.9",
+		"diff": "^9.0.0",
+		"drizzle-orm": "^0.45.2",
+		"es-toolkit": "^1.47.0",
+		"immer": "^11.1.8",
+		"sharp": "^0.34.5",
+		"valibot": "^1.4.1",
+		"yaml": "^2.9.0"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.13",
+		"@types/node": "^25.9.2",
+		"@withxat/eslint-config": "^1.1.4",
+		"@withxat/tsconfig": "^1.0.4",
+		"drizzle-kit": "^0.31.10",
+		"eslint": "^10.4.1",
+		"node-gyp": "^12.4.0",
+		"tsdown": "^0.22.2",
+		"tsx": "^4.22.4",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.8"
+	}
 }

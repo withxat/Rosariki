@@ -1,58 +1,58 @@
-import type { ResolvedChatConfig } from '../config/config';
-import type { ConversationEntry } from '../unified-api/types';
+import type { ResolvedChatConfig } from '../config/config'
+import type { ConversationEntry } from '../unified-api/types'
 
-export type ProviderFormat = 'openai-chat' | 'responses' | 'anthropic-messages';
+export type ProviderFormat = 'anthropic-messages' | 'openai-chat' | 'responses'
 
 export interface TurnResponseV2 {
-  requestedAtMs: number;
-  entries: ConversationEntry[];
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  modelName: string;
+	cacheReadTokens: number
+	cacheWriteTokens: number
+	entries: ConversationEntry[]
+	inputTokens: number
+	modelName: string
+	outputTokens: number
+	requestedAtMs: number
 }
 
 export interface ProbeResponseV2 {
-  requestedAtMs: number;
-  entries: ConversationEntry[];
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  modelName: string;
-  isActivated: boolean;
-  createdAt: number;
+	cacheReadTokens: number
+	cacheWriteTokens: number
+	createdAt: number
+	entries: ConversationEntry[]
+	inputTokens: number
+	isActivated: boolean
+	modelName: string
+	outputTokens: number
+	requestedAtMs: number
 }
 
 export interface LlmEndpoint {
-  apiBaseUrl: string;
-  apiKey: string;
-  model: string;
-  apiFormat?: ProviderFormat;
-  maxImagesAllowed?: number;
-  timeoutSec?: number;
+	apiBaseUrl: string
+	apiFormat?: ProviderFormat
+	apiKey: string
+	maxImagesAllowed?: number
+	model: string
+	timeoutSec?: number
 }
 
 export interface DriverConfig {
-  chatIds: string[];
-  resolveChatConfig: (chatId: string) => ResolvedChatConfig;
+	chatIds: string[]
+	resolveChatConfig: (chatId: string) => ResolvedChatConfig
 }
 
 export interface CompactionConfig {
-  maxContextEstTokens: number;
-  workingWindowEstTokens: number;
-  model?: LlmEndpoint;
+	maxContextEstTokens: number
+	model?: LlmEndpoint
+	workingWindowEstTokens: number
 }
 
 export interface CompactionSessionMeta {
-  oldCursorMs: number;
-  newCursorMs: number;
-  summary: string;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
+	cacheReadTokens: number
+	cacheWriteTokens: number
+	inputTokens: number
+	newCursorMs: number
+	oldCursorMs: number
+	outputTokens: number
+	summary: string
 }
 
-export type { ResolvedChatConfig } from '../config/config';
+export type { ResolvedChatConfig } from '../config/config'

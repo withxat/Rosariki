@@ -1,46 +1,45 @@
-export interface RenderParams {
-  compactCursorMs?: number;
-  botUserId?: string;
-  contactNames?: Map<string, string>;
-}
+import type { Sharp } from 'sharp'
 
-import type { Sharp } from 'sharp';
+export interface RenderParams {
+	botUserId?: string
+	compactCursorMs?: number
+}
 
 // Provider-agnostic content piece — maps to LLM API content parts.
 // Driver converts to provider-specific format at the wire boundary.
-export type RenderedContentPiece =
-  | { type: 'text'; text: string }
-  | { type: 'image'; image: Sharp };
+export type RenderedContentPiece
+	= | { image: Sharp, type: 'image' }
+		| { text: string, type: 'text' }
 
 // Rendered Context (RC) — the output of the Rendering layer.
 // One segment per IC node. Carries receivedAtMs from the source event for merge ordering.
 // Driver merges RC + TRs by timestamp, grouping consecutive segments between TRs
 // into user messages.
 export interface RenderedContextSegment {
-  receivedAtMs: number;
-  content: RenderedContentPiece[];
-  // Sender is this bot account (used by Driver debounce to ignore bot's own messages
-  // when deciding whether new external input arrived). True for all messages from this
-  // bot regardless of origin — including messages sent by other programs controlling
-  // the same bot account.
-  isMyself?: boolean;
-  // Message originated from this bot instance's send_message tool call (used by
-  // trimSelfMessagesCoveredBySendToolCalls to deduplicate — these messages already
-  // exist as tool results in TRs). A message can be isMyself without isSelfSent
-  // if another program sent it through the same bot account.
-  isSelfSent?: boolean;
-  // Content contains a <mention> node targeting this bot's userId
-  mentionsMe?: boolean;
-  // Reply-to target is a message sent by this bot
-  repliesToMe?: boolean;
-  // Slack message ts (message nodes only)
-  messageId?: string;
-  // Parent thread root ts when this message was posted inside a thread
-  replyToMessageId?: string;
-  // Segment is a runtime event (e.g. background task completion). These bypass
-  // the probe gate — the bot always responds to runtime notifications.
-  isRuntimeEvent?: boolean;
-  isScheduledWake?: boolean;
+	content: RenderedContentPiece[]
+	// Sender is this bot account (used by Driver debounce to ignore bot's own messages
+	// when deciding whether new external input arrived). True for all messages from this
+	// bot regardless of origin — including messages sent by other programs controlling
+	// the same bot account.
+	isMyself?: boolean
+	// Segment is a runtime event (e.g. background task completion). These bypass
+	// the probe gate — the bot always responds to runtime notifications.
+	isRuntimeEvent?: boolean
+	isScheduleTriggered?: boolean
+	// Message originated from this bot instance's send_message tool call (used by
+	// trimSelfMessagesCoveredBySendToolCalls to deduplicate — these messages already
+	// exist as tool results in TRs). A message can be isMyself without isSelfSent
+	// if another program sent it through the same bot account.
+	isSelfSent?: boolean
+	// Content contains a <mention> node targeting this bot's userId
+	mentionsMe?: boolean
+	// Slack message ts (message nodes only)
+	messageId?: string
+	receivedAtMs: number
+	// Reply-to target is a message sent by this bot
+	repliesToMe?: boolean
+	// Parent thread root ts when this message was posted inside a thread
+	replyToMessageId?: string
 }
 
-export type RenderedContext = RenderedContextSegment[];
+export type RenderedContext = RenderedContextSegment[]

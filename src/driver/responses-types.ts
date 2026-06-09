@@ -3,144 +3,144 @@
 // ── Request types ──
 
 export interface ResponsesPayload {
-  model: string;
-  input: string | ResponseInputItem[];
-  instructions: string | null;
-  temperature: number | null;
-  top_p: number | null;
-  max_output_tokens: number | null;
-  tools: ResponseTool[] | null;
-  tool_choice: ResponseToolChoice;
-  stream: boolean | null;
-  store: boolean;
-  parallel_tool_calls: boolean;
-  reasoning?: {
-    effort: 'low' | 'medium' | 'high' | 'xhigh' | 'none' | 'minimal';
-    summary: 'detailed' | 'auto' | 'concise';
-  };
-  include?: string[];
+	include?: string[]
+	input: ResponseInputItem[] | string
+	instructions: null | string
+	max_output_tokens: null | number
+	model: string
+	parallel_tool_calls: boolean
+	reasoning?: {
+		effort: 'high' | 'low' | 'medium' | 'minimal' | 'none' | 'xhigh'
+		summary: 'auto' | 'concise' | 'detailed'
+	}
+	store: boolean
+	stream: boolean | null
+	temperature: null | number
+	tool_choice: ResponseToolChoice
+	tools: null | ResponseTool[]
+	top_p: null | number
 }
 
-export type ResponseInputItem =
-  | ResponseInputMessage
-  | ResponseFunctionToolCallItem
-  | ResponseFunctionCallOutputItem
-  | ResponseInputReasoning;
+export type ResponseInputItem
+	= | ResponseFunctionCallOutputItem
+		| ResponseFunctionToolCallItem
+		| ResponseInputMessage
+		| ResponseInputReasoning
 
 export interface ResponseInputMessage {
-  type: 'message';
-  role: 'user' | 'assistant' | 'system' | 'developer';
-  content: string | ResponseInputContent[];
+	content: ResponseInputContent[] | string
+	role: 'assistant' | 'developer' | 'system' | 'user'
+	type: 'message'
 }
 
-export type ResponseInputContent =
-  | ResponseInputText
-  | ResponseInputImage;
+export type ResponseInputContent
+	= | ResponseInputImage
+		| ResponseInputText
 
 export interface ResponseInputText {
-  type: 'input_text' | 'output_text';
-  text: string;
+	text: string
+	type: 'input_text' | 'output_text'
 }
 
 export interface ResponseInputImage {
-  type: 'input_image';
-  image_url: string;
-  detail: 'auto' | 'low' | 'high';
+	detail: 'auto' | 'high' | 'low'
+	image_url: string
+	type: 'input_image'
 }
 
 export interface ResponseInputReasoning {
-  type: 'reasoning';
-  id: string;
-  summary: { type: 'summary_text'; text: string }[];
-  encrypted_content: string;
+	encrypted_content: string
+	id: string
+	summary: { text: string, type: 'summary_text' }[]
+	type: 'reasoning'
 }
 
 export interface ResponseFunctionToolCallItem {
-  type: 'function_call';
-  call_id: string;
-  name: string;
-  arguments: string;
-  status: 'completed' | 'in_progress' | 'incomplete';
+	arguments: string
+	call_id: string
+	name: string
+	status: 'completed' | 'in_progress' | 'incomplete'
+	type: 'function_call'
 }
 
 export interface ResponseFunctionCallOutputItem {
-  type: 'function_call_output';
-  call_id: string;
-  output: string | ResponseInputContent[];
-  status?: 'completed' | 'incomplete';
-  requiresFollowUp?: boolean;
+	call_id: string
+	output: ResponseInputContent[] | string
+	requiresFollowUp?: boolean
+	status?: 'completed' | 'incomplete'
+	type: 'function_call_output'
 }
 
 export interface ResponseTool {
-  type: 'function';
-  name: string;
-  parameters: Record<string, unknown>;
-  strict: boolean;
-  description?: string;
+	description?: string
+	name: string
+	parameters: Record<string, unknown>
+	strict: boolean
+	type: 'function'
 }
 
-export type ResponseToolChoice =
-  | 'auto'
-  | 'none'
-  | 'required'
-  | { type: 'function'; name: string };
+export type ResponseToolChoice
+	= | 'auto'
+		| 'none'
+		| 'required'
+		| { name: string, type: 'function' }
 
 // ── Response types ──
 
 export interface ResponsesResult {
-  id: string;
-  object: string;
-  model: string;
-  output: ResponseOutputItem[];
-  output_text: string;
-  status: 'completed' | 'incomplete' | 'failed' | 'in_progress';
-  incomplete_details?: { reason: string };
-  error?: { message: string; type: string; code: string };
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-    input_tokens_details?: { cached_tokens: number };
-    output_tokens_details?: { reasoning_tokens: number };
-  };
+	error?: { code: string, message: string, type: string }
+	id: string
+	incomplete_details?: { reason: string }
+	model: string
+	object: string
+	output: ResponseOutputItem[]
+	output_text: string
+	status: 'completed' | 'failed' | 'in_progress' | 'incomplete'
+	usage?: {
+		input_tokens: number
+		input_tokens_details?: { cached_tokens: number }
+		output_tokens: number
+		output_tokens_details?: { reasoning_tokens: number }
+		total_tokens: number
+	}
 }
 
-export type ResponseOutputItem =
-  | ResponseOutputMessage
-  | ResponseOutputFunctionCall
-  | ResponseOutputReasoning;
+export type ResponseOutputItem
+	= | ResponseOutputFunctionCall
+		| ResponseOutputMessage
+		| ResponseOutputReasoning
 
 export interface ResponseOutputMessage {
-  type: 'message';
-  role: 'assistant';
-  content: ResponseOutputContentBlock[];
+	content: ResponseOutputContentBlock[]
+	role: 'assistant'
+	type: 'message'
 }
 
-export type ResponseOutputContentBlock =
-  | ResponseOutputText
-  | ResponseOutputRefusal;
+export type ResponseOutputContentBlock
+	= | ResponseOutputRefusal
+		| ResponseOutputText
 
 export interface ResponseOutputText {
-  type: 'output_text';
-  text: string;
+	text: string
+	type: 'output_text'
 }
 
 export interface ResponseOutputRefusal {
-  type: 'refusal';
-  refusal: string;
+	refusal: string
+	type: 'refusal'
 }
 
 export interface ResponseOutputFunctionCall {
-  type: 'function_call';
-  call_id: string;
-  name: string;
-  arguments: string;
-  status: string;
+	arguments: string
+	call_id: string
+	name: string
+	status: string
+	type: 'function_call'
 }
 
 export interface ResponseOutputReasoning {
-  type: 'reasoning';
-  id: string;
-  summary: { type: 'summary_text'; text: string }[];
-  encrypted_content?: string;
+	encrypted_content?: string
+	id: string
+	summary: { text: string, type: 'summary_text' }[]
+	type: 'reasoning'
 }

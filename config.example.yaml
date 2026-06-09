@@ -1,41 +1,42 @@
 models:
   primary:
-    apiBaseUrl: ""
-    apiKey: ""
-    model: "claude-opus-4-6"
+    apiBaseUrl: ''
+    apiKey: ''
+    model: claude-opus-4-6
     # apiFormat: "responses"        # optional: 'openai-chat' (default), 'responses', or 'anthropic-messages'
     # timeoutSec: 120                # optional: abort requests that stream for too long
     # maxImagesAllowed: 100     # optional: drop oldest images when context exceeds this limit
   probe:
-    apiBaseUrl: ""
-    apiKey: ""
-    model: "claude-haiku-4-5"
+    apiBaseUrl: ''
+    apiKey: ''
+    model: claude-haiku-4-5
     # timeoutSec: 60                 # optional: abort requests that stream for too long
     # maxImagesAllowed: 10     # optional: Gemini Flash allows max 10 images
 
-# Bot scopes: app_mentions:read, channels:history, groups:history, chat:write,
-# files:write, reactions:write, emoji:read (workspace custom emoji catalog), users:read
+# Bot scopes: app_mentions:read, channels:history, groups:history, channels:read,
+# chat:write, files:write, reactions:write, emoji:read (workspace custom emoji catalog),
+# users:read, users.profile:read, canvases:read (slack_read_canvas)
 slack:
-  botToken: ""       # xoxb-...
-  appToken: ""       # xapp-..., requires connections:write
-  signingSecret: ""  # optional for Socket Mode, kept for compatibility
-  botUserId: ""      # optional; fetched with auth.test when omitted
+  botToken: '' # xoxb-...
+  appToken: '' # xapp-..., requires connections:write
+  signingSecret: '' # optional for Socket Mode, kept for compatibility
+  botUserId: '' # optional; fetched with auth.test when omitted
 
 # Agent persona: copy agent/IDENTITY.example.md → agent/IDENTITY.md (and SOUL.example.md → SOUL.md).
 # Both are injected into the primary system prompt when present. Override directory with AGENT_DIR.
 agent:
-  dir: "./agent"
-  displayName: "Cahciua"   # sender name in chat XML for bot messages; align with IDENTITY
+  dir: ./agent
+  displayName: Cahciua # sender name in chat XML for bot messages; align with IDENTITY
 
 database:
-  path: "./data/cahciua.db"
+  path: ./data/cahciua.db
 
 # Runtime configuration: shell and file I/O commands used by tools.
 # These are global (not per-chat) because they describe the execution environment.
 runtime:
-  shell: ["/bin/bash", "-c"]                                   # command prefix for bash tool
-  writeFile: ["/bin/bash", "-c", "/usr/bin/cat > \"$0\""]      # write stdin to file (path appended as arg); required
-  readFile: ["/usr/bin/cat"]                                   # read file to stdout (path appended as arg); required
+  shell: [/bin/bash, -c] # command prefix for bash tool
+  writeFile: [/bin/bash, -c, '/usr/bin/cat > "$0"'] # write stdin to file (path appended as arg); required
+  readFile: [/usr/bin/cat] # read file to stdout (path appended as arg); required
   # writeFileSizeLimit: 20971520                               # max bytes for download_file (default 20 MB)
   # readFileSizeLimit: 20971520                                # max bytes for runtime.readFile consumers (send_message attachments, read_image)
 
@@ -43,20 +44,20 @@ runtime:
 # Each per-chat entry is deep-merged with "default" — only specify overrides.
 chats:
   default:
-    model: "primary"            # references a key in models
+    model: primary # references a key in models
     compaction:
-      maxContextEstTokens: 512000    # high water mark: trigger compaction when estimated context exceeds this
-      workingWindowEstTokens: 8000   # low water mark: how many estimated tokens of raw content to retain after compaction
+      maxContextEstTokens: 512000 # high water mark: trigger compaction when estimated context exceeds this
+      workingWindowEstTokens: 8000 # low water mark: how many estimated tokens of raw content to retain after compaction
       # model: "primary"           # optional: override model for compaction calls (defaults to chat model)
     probe:
       enabled: false
-      model: "probe"              # references a key in models
+      model: probe # references a key in models
     imageToText:
       enabled: false
-      model: "primary"            # references a key in models
+      model: primary # references a key in models
     tools:
       webSearch:
-        tavilyKey: ""                              # Tavily API key for web search (required)
+        tavilyKey: '' # Tavily API key for web search (required)
 
   # Per-chat overrides — uncomment and customize:
   # "C0123456789": {}           # whitelisted with all defaults

@@ -1,11 +1,13 @@
-import { Format, initLogger, LogLevel, useGlobalLogger } from '@guiiai/logg';
+import process from 'node:process'
 
-export const setupLogger = () => {
-  const isDev = process.env.NODE_ENV !== 'production';
-  initLogger(
-    isDev ? LogLevel.Debug : LogLevel.Log,
-    isDev ? Format.Pretty : Format.JSON,
-  );
-};
+import { Format, initLogger, LogLevel, useGlobalLogger } from '@guiiai/logg'
 
-export const useLogger = (context: string) => useGlobalLogger(context);
+export function setupLogger() {
+	const isDev = process.env.NODE_ENV !== 'production'
+	initLogger(
+		isDev ? LogLevel.Debug : LogLevel.Log,
+		isDev ? Format.Pretty : Format.JSON,
+	)
+}
+
+export const useLogger = (context: string) => useGlobalLogger(context)

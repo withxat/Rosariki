@@ -1,10 +1,10 @@
-import { defineConfig } from 'drizzle-kit';
+import { defineConfig } from 'drizzle-kit'
 
 export default defineConfig({
-  schema: './src/db/schema.ts',
-  out: './drizzle',
-  dialect: 'sqlite',
-  dbCredentials: {
-    url: process.env.DB_PATH || './data/cahciua.db',
-  },
-});
+	dbCredentials: {
+		url: process.env.DB_PATH || './data/cahciua.db',
+	},
+	dialect: 'sqlite',
+	out: './drizzle',
+	schema: './src/db/schema.ts',
+})

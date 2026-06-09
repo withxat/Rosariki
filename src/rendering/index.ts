@@ -1,290 +1,314 @@
-import sharp from 'sharp';
+import type { CanonicalAttachment, CanonicalUser, ContentNode } from '../adaptation/types'
+import type { ICMessage, ICRuntimeEvent, ICSystemEvent, IntermediateContext } from '../projection/types'
+import type { RenderedContentPiece, RenderedContext, RenderedContextSegment, RenderParams } from './types'
 
-import type { RenderParams, RenderedContentPiece, RenderedContext, RenderedContextSegment } from './types';
-import type { CanonicalAttachment, CanonicalUser, ContentNode } from '../adaptation/types';
-import type { ICMessage, ICRuntimeEvent, ICSystemEvent, IntermediateContext } from '../projection/types';
+import { Buffer } from 'node:buffer'
 
-export type { RenderParams, RenderedContentPiece, RenderedContext, RenderedContextSegment } from './types';
+import sharp from 'sharp'
+
+export type { RenderedContentPiece, RenderedContext, RenderedContextSegment, RenderParams } from './types'
 
 // --- Helpers ---
 
-const escapeXml = (text: string): string =>
-  text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function escapeXml(text: string): string {
+	return text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+}
 
-const formatSender = (user: CanonicalUser, contactNames?: Map<string, string>): string => {
-  const contactName = contactNames?.get(user.id);
-  const displayName = contactName ?? (user.displayName !== '' ? user.displayName : (user.username ?? user.id));
-  if (user.username && user.username !== displayName) return `${displayName} (@${user.username})`;
-  return displayName;
-};
+function formatSender(user: CanonicalUser): string {
+	const displayName = user.displayName !== '' ? user.displayName : (user.username ?? user.id)
+	if (user.username && user.username !== displayName)
+		return `${displayName} (@${user.username})`
+	return displayName
+}
 
-const pad2 = (n: number): string => String(n).padStart(2, '0');
+const pad2 = (n: number): string => String(n).padStart(2, '0')
 
-const formatTimestamp = (epochSec: number, utcOffsetMin: number): string => {
-  // Shift to local time by adding offset, then read UTC accessors
-  const d = new Date((epochSec + utcOffsetMin * 60) * 1000);
-  const date = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
-  const time = `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`;
+function formatTimestamp(epochSec: number, utcOffsetMin: number): string {
+	// Shift to local time by adding offset, then read UTC accessors
+	const d = new Date((epochSec + utcOffsetMin * 60) * 1000)
+	const date = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`
+	const time = `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`
 
-  const sign = utcOffsetMin >= 0 ? '+' : '-';
-  const abs = Math.abs(utcOffsetMin);
-  const offset = `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
+	const sign = utcOffsetMin >= 0 ? '+' : '-'
+	const abs = Math.abs(utcOffsetMin)
+	const offset = `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`
 
-  return `${date}T${time}${offset}`;
-};
+	return `${date}T${time}${offset}`
+}
 
 // --- ContentNode → XML ---
 
-const renderContentNode = (node: ContentNode): string => {
-  switch (node.type) {
-  case 'text': return escapeXml(node.text);
-  case 'code': return `<code>${escapeXml(node.text)}</code>`;
-  case 'pre': return node.language
-    ? `<pre lang="${escapeXml(node.language)}">${escapeXml(node.text)}</pre>`
-    : `<pre>${escapeXml(node.text)}</pre>`;
-  case 'bold': return `<b>${renderContent(node.children)}</b>`;
-  case 'italic': return `<i>${renderContent(node.children)}</i>`;
-  case 'underline': return `<u>${renderContent(node.children)}</u>`;
-  case 'strikethrough': return `<s>${renderContent(node.children)}</s>`;
-  case 'spoiler': return `<spoiler>${renderContent(node.children)}</spoiler>`;
-  case 'blockquote': return `<blockquote>${renderContent(node.children)}</blockquote>`;
-  case 'link': return `<a href="${escapeXml(node.url)}">${renderContent(node.children)}</a>`;
-  case 'mention': return node.userId
-    ? `<mention uid="${escapeXml(node.userId)}">${renderContent(node.children)}</mention>`
-    : `<mention>${renderContent(node.children)}</mention>`;
-  case 'custom_emoji':
-    if (node.altText) {
-      const packAttr = node.stickerSetName ? ` pack="${escapeXml(node.stickerSetName)}"` : '';
-      return `<custom-emoji${packAttr}>${escapeXml(node.altText)}</custom-emoji>`;
-    }
-    if (node.altTextError)
-      return `<custom-emoji error="${escapeXml(node.altTextError)}"/>`;
-    return renderContent(node.children);
-  }
-};
+function renderContentNode(node: ContentNode): string {
+	switch (node.type) {
+		case 'text': return escapeXml(node.text)
+		case 'code': return `<code>${escapeXml(node.text)}</code>`
+		case 'pre': return node.language
+			? `<pre lang="${escapeXml(node.language)}">${escapeXml(node.text)}</pre>`
+			: `<pre>${escapeXml(node.text)}</pre>`
+		case 'bold': return `<b>${renderContent(node.children)}</b>`
+		case 'italic': return `<i>${renderContent(node.children)}</i>`
+		case 'underline': return `<u>${renderContent(node.children)}</u>`
+		case 'strikethrough': return `<s>${renderContent(node.children)}</s>`
+		case 'spoiler': return `<spoiler>${renderContent(node.children)}</spoiler>`
+		case 'blockquote': return `<blockquote>${renderContent(node.children)}</blockquote>`
+		case 'link': return `<a href="${escapeXml(node.url)}">${renderContent(node.children)}</a>`
+		case 'mention': return node.userId
+			? `<mention uid="${escapeXml(node.userId)}">${renderContent(node.children)}</mention>`
+			: `<mention>${renderContent(node.children)}</mention>`
+		case 'custom_emoji':
+			if (node.altText) {
+				const packAttr = node.stickerSetName ? ` pack="${escapeXml(node.stickerSetName)}"` : ''
+				return `<custom-emoji${packAttr}>${escapeXml(node.altText)}</custom-emoji>`
+			}
+			if (node.altTextError)
+				return `<custom-emoji error="${escapeXml(node.altTextError)}"/>`
+			return renderContent(node.children)
+	}
+}
 
-const renderContent = (nodes: ContentNode[]): string =>
-  nodes.map(renderContentNode).join('');
+function renderContent(nodes: ContentNode[]): string {
+	return nodes.map(renderContentNode).join('')
+}
 
-const REPLY_PREVIEW_MAX_CHARS = 100;
+const REPLY_PREVIEW_MAX_CHARS = 100
 
 /** Truncate rendered XML without breaking tags. */
-const truncateXml = (xml: string, maxLen: number): string => {
-  if (xml.length <= maxLen) return xml;
-  let cutAt = maxLen;
-  const lastClose = xml.lastIndexOf('>', cutAt);
-  const lastOpen = xml.lastIndexOf('<', cutAt);
-  // If we're inside a tag, truncate before the opening '<'
-  if (lastOpen > lastClose) cutAt = lastOpen;
-  if (cutAt <= 0) return '';
-  // Don't split a surrogate pair — step back if the char before cutAt is a high surrogate.
-  if ((xml.charCodeAt(cutAt - 1) & 0xFC00) === 0xD800) cutAt--;
-  return `${xml.slice(0, cutAt)}…`;
-};
+function truncateXml(xml: string, maxLen: number): string {
+	if (xml.length <= maxLen)
+		return xml
+	let cutAt = maxLen
+	const lastClose = xml.lastIndexOf('>', cutAt)
+	const lastOpen = xml.lastIndexOf('<', cutAt)
+	// If we're inside a tag, truncate before the opening '<'
+	if (lastOpen > lastClose)
+		cutAt = lastOpen
+	if (cutAt <= 0)
+		return ''
+	// Don't split a surrogate pair — step back if the char before cutAt is a high surrogate.
+	if ((xml.charCodeAt(cutAt - 1) & 0xFC00) === 0xD800)
+		cutAt--
+	return `${xml.slice(0, cutAt)}…`
+}
 
 // --- Attachment → XML ---
 
-const renderAttachment = (att: CanonicalAttachment, messageId: string, index: number): string => {
-  const attrs: string[] = [`type="${att.type}"`];
-  if (att.mimeType) attrs.push(`mime="${escapeXml(att.mimeType)}"`);
-  if (att.fileName) attrs.push(`name="${escapeXml(att.fileName)}"`);
-  if (att.width != null && att.height != null) attrs.push(`size="${att.width}x${att.height}"`);
-  if (att.duration != null) attrs.push(`duration="${att.duration}"`);
-  if (att.stickerSetName) attrs.push(`pack="${escapeXml(att.stickerSetName)}"`);
-  attrs.push(`file-id="${escapeXml(messageId)}:${index}"`);
-  if (att.altText) {
-    const tag = att.type === 'sticker' ? 'sticker' : (att.animationHash ? 'animation' : 'image');
-    return `<${tag} ${attrs.join(' ')}>${escapeXml(att.altText)}</${tag}>`;
-  }
-  return `<attachment ${attrs.join(' ')}/>`;
-};
+function renderAttachment(att: CanonicalAttachment, messageId: string, index: number): string {
+	const attrs: string[] = [`type="${att.type}"`]
+	if (att.mimeType)
+		attrs.push(`mime="${escapeXml(att.mimeType)}"`)
+	if (att.fileName)
+		attrs.push(`name="${escapeXml(att.fileName)}"`)
+	if (att.width != null && att.height != null)
+		attrs.push(`size="${att.width}x${att.height}"`)
+	if (att.duration != null)
+		attrs.push(`duration="${att.duration}"`)
+	if (att.stickerSetName)
+		attrs.push(`pack="${escapeXml(att.stickerSetName)}"`)
+	attrs.push(`file-id="${escapeXml(messageId)}:${index}"`)
+	if (att.altText) {
+		const tag = att.type === 'sticker' ? 'sticker' : (att.animationHash ? 'animation' : 'image')
+		return `<${tag} ${attrs.join(' ')}>${escapeXml(att.altText)}</${tag}>`
+	}
+	return `<attachment ${attrs.join(' ')}/>`
+}
 
 // --- Mention detection ---
 
-const hasMention = (nodes: ContentNode[], userId: string): boolean =>
-  nodes.some(n =>
-    (n.type === 'mention' && n.userId === userId)
-    || ('children' in n && hasMention(n.children, userId)));
+function hasMention(nodes: ContentNode[], userId: string): boolean {
+	return nodes.some(n =>
+		(n.type === 'mention' && n.userId === userId)
+		|| ('children' in n && hasMention(n.children, userId)))
+}
 
 // --- ICNode → content pieces ---
 
-const renderMessage = (msg: ICMessage, params: RenderParams): { content: RenderedContentPiece[]; isMyself: boolean; isSelfSent: boolean; mentionsMe: boolean; repliesToMe: boolean } => {
-  const isMyself = !!(params.botUserId && msg.sender?.id === params.botUserId);
-  const isSelfSent = !!msg.isSelfSent;
-  const mentionsMe = !!(params.botUserId && hasMention(msg.content, params.botUserId));
-  const repliesToMe = !!(params.botUserId && msg.replyToSender?.id === params.botUserId);
-  const attrs: string[] = [
-    `id="${escapeXml(msg.messageId)}"`,
-  ];
-  if (msg.sender) attrs.push(`sender="${escapeXml(formatSender(msg.sender, params.contactNames))}"`);
-  if (isMyself) attrs.push('myself="true"');
-  if (msg.replyToMessageId) attrs.push('in-thread="true"');
-  attrs.push(`t="${formatTimestamp(msg.timestampSec, msg.utcOffsetMin)}"`);
+function renderMessage(msg: ICMessage, params: RenderParams): { content: RenderedContentPiece[], isMyself: boolean, isSelfSent: boolean, mentionsMe: boolean, repliesToMe: boolean } {
+	const isMyself = !!(params.botUserId && msg.sender?.id === params.botUserId)
+	const isSelfSent = !!msg.isSelfSent
+	const mentionsMe = !!(params.botUserId && hasMention(msg.content, params.botUserId))
+	const repliesToMe = !!(params.botUserId && msg.replyToSender?.id === params.botUserId)
+	const attrs: string[] = [
+		`id="${escapeXml(msg.messageId)}"`,
+	]
+	if (msg.sender)
+		attrs.push(`sender="${escapeXml(formatSender(msg.sender))}"`)
+	if (isMyself)
+		attrs.push('myself="true"')
+	if (msg.replyToMessageId)
+		attrs.push('in-thread="true"')
+	attrs.push(`t="${formatTimestamp(msg.timestampSec, msg.utcOffsetMin)}"`)
 
-  if (msg.editedAtSec != null)
-    attrs.push(`edited="${formatTimestamp(msg.editedAtSec, msg.editUtcOffsetMin ?? msg.utcOffsetMin)}"`);
+	if (msg.editedAtSec != null)
+		attrs.push(`edited="${formatTimestamp(msg.editedAtSec, msg.editUtcOffsetMin ?? msg.utcOffsetMin)}"`)
 
-  if (msg.forwardInfo) {
-    const from = (msg.forwardInfo.sender ? formatSender(msg.forwardInfo.sender, params.contactNames) : undefined)
-      ?? msg.forwardInfo.senderName
-      ?? (msg.forwardInfo.fromUserId ? `user:${msg.forwardInfo.fromUserId}` : undefined)
-      ?? (msg.forwardInfo.fromChatId ? `chat:${msg.forwardInfo.fromChatId}` : undefined)
-      ?? 'unknown';
-    attrs.push(`forwarded_from="${escapeXml(from)}"`);
-  }
+	if (msg.forwardInfo) {
+		const from = (msg.forwardInfo.sender ? formatSender(msg.forwardInfo.sender) : undefined)
+			?? msg.forwardInfo.senderName
+			?? (msg.forwardInfo.fromUserId ? `user:${msg.forwardInfo.fromUserId}` : undefined)
+			?? (msg.forwardInfo.fromChatId ? `chat:${msg.forwardInfo.fromChatId}` : undefined)
+			?? 'unknown'
+		attrs.push(`forwarded_from="${escapeXml(from)}"`)
+	}
 
-  if (msg.deleted) {
-    attrs.push('deleted="true"');
-    return { content: [{ type: 'text', text: `<message ${attrs.join(' ')}/>` }], isMyself, isSelfSent, mentionsMe, repliesToMe };
-  }
+	if (msg.deleted) {
+		attrs.push('deleted="true"')
+		return { content: [{ text: `<message ${attrs.join(' ')}/>`, type: 'text' }], isMyself, isSelfSent, mentionsMe, repliesToMe }
+	}
 
-  const parts: string[] = [];
+	const parts: string[] = []
 
-  if (msg.replyToMessageId) {
-    const replyAttrs = [`id="${escapeXml(msg.replyToMessageId)}"`];
-    if (msg.replyToSender) replyAttrs.push(`sender="${escapeXml(formatSender(msg.replyToSender, params.contactNames))}"`);
-    const preview = msg.replyToContent
-      ? truncateXml(renderContent(msg.replyToContent), REPLY_PREVIEW_MAX_CHARS)
-      : (msg.replyToPreview ? escapeXml(msg.replyToPreview) : '');
-    parts.push(`<in-reply-to ${replyAttrs.join(' ')}>${preview}</in-reply-to>`);
-  }
+	if (msg.replyToMessageId) {
+		const replyAttrs = [`id="${escapeXml(msg.replyToMessageId)}"`]
+		if (msg.replyToSender)
+			replyAttrs.push(`sender="${escapeXml(formatSender(msg.replyToSender))}"`)
+		const preview = msg.replyToContent
+			? truncateXml(renderContent(msg.replyToContent), REPLY_PREVIEW_MAX_CHARS)
+			: (msg.replyToPreview ? escapeXml(msg.replyToPreview) : '')
+		parts.push(`<in-reply-to ${replyAttrs.join(' ')}>${preview}</in-reply-to>`)
+	}
 
-  const body = renderContent(msg.content);
-  if (body) parts.push(body);
+	const body = renderContent(msg.content)
+	if (body)
+		parts.push(body)
 
-  for (let i = 0; i < msg.attachments.length; i++)
-    parts.push(renderAttachment(msg.attachments[i]!, msg.messageId, i));
+	for (let i = 0; i < msg.attachments.length; i++)
+		parts.push(renderAttachment(msg.attachments[i]!, msg.messageId, i))
 
-  const pieces: RenderedContentPiece[] = [
-    { type: 'text', text: `<message ${attrs.join(' ')}>\n${parts.join('\n')}\n</message>` },
-  ];
+	const pieces: RenderedContentPiece[] = [
+		{ text: `<message ${attrs.join(' ')}>\n${parts.join('\n')}\n</message>`, type: 'text' },
+	]
 
-  // Append thumbnail images as separate content pieces (Driver converts to provider format)
-  for (const att of msg.attachments) {
-    if (!att.altText && att.thumbnailWebp)
-      pieces.push({ type: 'image', image: sharp(Buffer.from(att.thumbnailWebp, 'base64')) });
-  }
+	// Append thumbnail images as separate content pieces (Driver converts to provider format)
+	for (const att of msg.attachments) {
+		if (!att.altText && att.thumbnailWebp)
+			pieces.push({ image: sharp(Buffer.from(att.thumbnailWebp, 'base64')), type: 'image' })
+	}
 
-  return { content: pieces, isMyself, isSelfSent, mentionsMe, repliesToMe };
-};
+	return { content: pieces, isMyself, isSelfSent, mentionsMe, repliesToMe }
+}
 
-const renderSystemEvent = (event: ICSystemEvent, contactNames?: Map<string, string>): string => {
-  const t = formatTimestamp(event.timestampSec, event.utcOffsetMin);
-  const actorAttr = 'actor' in event && event.actor ? ` actor="${escapeXml(formatSender(event.actor, contactNames))}"` : '';
+function renderSystemEvent(event: ICSystemEvent): string {
+	const t = formatTimestamp(event.timestampSec, event.utcOffsetMin)
+	const actorAttr = 'actor' in event && event.actor ? ` actor="${escapeXml(formatSender(event.actor))}"` : ''
 
-  switch (event.kind) {
-  case 'user_renamed':
-    return `<event type="name_change" t="${t}" from_name="${escapeXml(formatSender(event.oldUser, contactNames))}" to_name="${escapeXml(formatSender(event.newUser, contactNames))}"/>`;
+	switch (event.kind) {
+		case 'user_renamed':
+			return `<event type="name_change" t="${t}" from_name="${escapeXml(formatSender(event.oldUser))}" to_name="${escapeXml(formatSender(event.newUser))}"/>`
 
-  case 'members_joined': {
-    const members = event.members.map(m => formatSender(m, contactNames)).join(', ');
-    return `<event type="members_joined" t="${t}"${actorAttr} members="${escapeXml(members)}"/>`;
-  }
+		case 'members_joined': {
+			const members = event.members.map(m => formatSender(m)).join(', ')
+			return `<event type="members_joined" t="${t}"${actorAttr} members="${escapeXml(members)}"/>`
+		}
 
-  case 'member_left':
-    return `<event type="member_left" t="${t}"${actorAttr} member="${escapeXml(formatSender(event.member, contactNames))}"/>`;
+		case 'member_left':
+			return `<event type="member_left" t="${t}"${actorAttr} member="${escapeXml(formatSender(event.member))}"/>`
 
-  case 'chat_renamed': {
-    const fromAttr = event.oldTitle != null ? ` from="${escapeXml(event.oldTitle)}"` : '';
-    return `<event type="chat_renamed" t="${t}"${actorAttr}${fromAttr} to="${escapeXml(event.newTitle)}"/>`;
-  }
+		case 'chat_renamed': {
+			const fromAttr = event.oldTitle != null ? ` from="${escapeXml(event.oldTitle)}"` : ''
+			return `<event type="chat_renamed" t="${t}"${actorAttr}${fromAttr} to="${escapeXml(event.newTitle)}"/>`
+		}
 
-  case 'chat_photo_changed':
-    return `<event type="chat_photo_changed" t="${t}"${actorAttr}/>`;
+		case 'chat_photo_changed':
+			return `<event type="chat_photo_changed" t="${t}"${actorAttr}/>`
 
-  case 'chat_photo_deleted':
-    return `<event type="chat_photo_deleted" t="${t}"${actorAttr}/>`;
+		case 'chat_photo_deleted':
+			return `<event type="chat_photo_deleted" t="${t}"${actorAttr}/>`
 
-  case 'message_pinned': {
-    const preview = event.preview ? escapeXml(event.preview) : '';
-    if (preview)
-      return `<event type="message_pinned" t="${t}"${actorAttr} message_id="${escapeXml(event.messageId)}">${preview}</event>`;
-    return `<event type="message_pinned" t="${t}"${actorAttr} message_id="${escapeXml(event.messageId)}"/>`;
-  }
+		case 'message_pinned': {
+			const preview = event.preview ? escapeXml(event.preview) : ''
+			if (preview)
+				return `<event type="message_pinned" t="${t}"${actorAttr} message_id="${escapeXml(event.messageId)}">${preview}</event>`
+			return `<event type="message_pinned" t="${t}"${actorAttr} message_id="${escapeXml(event.messageId)}"/>`
+		}
 
-  case 'message_reaction':
-    return `<event type="message_reaction" t="${t}"${actorAttr} message_id="${escapeXml(event.messageId)}" reaction="${escapeXml(event.reaction)}" operation="${event.operation}"/>`;
+		case 'message_reaction':
+			return `<event type="message_reaction" t="${t}"${actorAttr} message_id="${escapeXml(event.messageId)}" reaction="${escapeXml(event.reaction)}" operation="${event.operation}"/>`
 
-  default: {
-    event satisfies never;
-    return '';
-  }
-  }
-};
+		default: {
+    event satisfies never
+    return ''
+		}
+	}
+}
 
 // --- RuntimeEvent → XML ---
 
-const renderRuntimeEvent = (event: ICRuntimeEvent): string => {
-  const t = formatTimestamp(event.timestampSec, event.utcOffsetMin);
-  if (event.kind === 'scheduled_wake') {
-    const attrs = [
-      'type="scheduled_wake"',
-      `schedule-id="${event.scheduleId}"`,
-      `t="${t}"`,
-    ];
-    return `<runtime-event ${attrs.join(' ')}>\n<instruction>${escapeXml(event.instruction)}</instruction>\n<note>Compose and send the message now (send_message or other tools). This is not pre-written text — write fresh content that fulfills the instruction.</note>\n</runtime-event>`;
-  }
+function renderRuntimeEvent(event: ICRuntimeEvent): string {
+	const t = formatTimestamp(event.timestampSec, event.utcOffsetMin)
+	if (event.kind === 'schedule_triggered') {
+		const attrs = [
+			'type="schedule-triggered"',
+			`schedule-id="${event.scheduleId}"`,
+			`t="${t}"`,
+			...(event.scheduleName ? [`name="${escapeXml(event.scheduleName)}"`] : []),
+		]
+		return `<runtime-event ${attrs.join(' ')}>\n<instruction>${escapeXml(event.instruction)}</instruction>\n<note>Scheduled task fired. Follow the instruction and call send_message.</note>\n</runtime-event>`
+	}
 
-  const attrs = [
-    'type="task_completed"',
-    `task-id="${event.taskId}"`,
-    `task-type="${escapeXml(event.taskType)}"`,
-    `t="${t}"`,
-  ];
+	const attrs = [
+		'type="task_completed"',
+		`task-id="${event.taskId}"`,
+		`task-type="${escapeXml(event.taskType)}"`,
+		`t="${t}"`,
+	]
 
-  const parts: string[] = [];
-  if (event.intention)
-    parts.push(`<intention>${escapeXml(event.intention)}</intention>`);
-  parts.push(`<final-summary>\n${escapeXml(event.finalSummary)}\n</final-summary>`);
-  if (event.hasFullOutput)
-    parts.push('<note>Full output available. Use read_task_output tool to view.</note>');
+	const parts: string[] = []
+	if (event.intention)
+		parts.push(`<intention>${escapeXml(event.intention)}</intention>`)
+	parts.push(`<final-summary>\n${escapeXml(event.finalSummary)}\n</final-summary>`)
+	if (event.hasFullOutput)
+		parts.push('<note>Full output available. Use read_task_output tool to view.</note>')
 
-  return `<runtime-event ${attrs.join(' ')}>\n${parts.join('\n')}\n</runtime-event>`;
-};
+	return `<runtime-event ${attrs.join(' ')}>\n${parts.join('\n')}\n</runtime-event>`
+}
 
 // --- Public API ---
 
-export const render = (ic: IntermediateContext, params: RenderParams = {}): RenderedContext => {
-  const segments: RenderedContextSegment[] = [];
+export function render(ic: IntermediateContext, params: RenderParams = {}): RenderedContext {
+	const segments: RenderedContextSegment[] = []
 
-  for (const node of ic.nodes) {
-    if (params.compactCursorMs != null && node.receivedAtMs < params.compactCursorMs) continue;
+	for (const node of ic.nodes) {
+		if (params.compactCursorMs != null && node.receivedAtMs < params.compactCursorMs)
+			continue
 
-    if (node.type === 'message') {
-      const { content, isMyself, isSelfSent, mentionsMe, repliesToMe } = renderMessage(node, params);
-      segments.push({
-        receivedAtMs: node.receivedAtMs,
-        content,
-        messageId: node.messageId,
-        ...(node.replyToMessageId && { replyToMessageId: node.replyToMessageId }),
-        ...(isMyself && { isMyself }),
-        ...(isSelfSent && { isSelfSent }),
-        ...(mentionsMe && { mentionsMe }),
-        ...(repliesToMe && { repliesToMe }),
-      });
-    } else if (node.type === 'runtime_event') {
-      const content = [{ type: 'text' as const, text: renderRuntimeEvent(node) }];
-      segments.push({
-        receivedAtMs: node.receivedAtMs,
-        content,
-        isRuntimeEvent: true,
-        ...(node.kind === 'scheduled_wake' && { isScheduledWake: true }),
-      });
-    } else {
-      const content = [{ type: 'text' as const, text: renderSystemEvent(node, params.contactNames) }];
-      segments.push({ receivedAtMs: node.receivedAtMs, content });
-    }
-  }
+		if (node.type === 'message') {
+			const { content, isMyself, isSelfSent, mentionsMe, repliesToMe } = renderMessage(node, params)
+			segments.push({
+				content,
+				messageId: node.messageId,
+				receivedAtMs: node.receivedAtMs,
+				...(node.replyToMessageId && { replyToMessageId: node.replyToMessageId }),
+				...(isMyself && { isMyself }),
+				...(isSelfSent && { isSelfSent }),
+				...(mentionsMe && { mentionsMe }),
+				...(repliesToMe && { repliesToMe }),
+			})
+		}
+		else if (node.type === 'runtime_event') {
+			const content = [{ text: renderRuntimeEvent(node), type: 'text' as const }]
+			segments.push({
+				content,
+				isRuntimeEvent: true,
+				receivedAtMs: node.receivedAtMs,
+				...(node.kind === 'schedule_triggered' && { isScheduleTriggered: true }),
+			})
+		}
+		else {
+			const content = [{ text: renderSystemEvent(node), type: 'text' as const }]
+			segments.push({ content, receivedAtMs: node.receivedAtMs })
+		}
+	}
 
-  return segments;
-};
+	return segments
+}
 
-export const rcToXml = (rc: RenderedContext): string =>
-  rc.map(seg =>
-    seg.content
-      .map(p => p.type === 'text' ? p.text : '[thumbnail]')
-      .join('\n')).join('\n');
+export function rcToXml(rc: RenderedContext): string {
+	return rc.map(seg =>
+		seg.content
+			.map(p => p.type === 'text' ? p.text : '[thumbnail]')
+			.join('\n')).join('\n')
+}

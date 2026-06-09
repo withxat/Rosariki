@@ -1,63 +1,67 @@
 export interface RuntimeTaskCompletedEvent {
-  type: 'runtime';
-  kind: 'task_completed';
-  chatId: string;
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  taskId: number;
-  taskType: string;
-  intention?: string;
-  finalSummary: string;
-  hasFullOutput: boolean;
+	chatId: string
+	finalSummary: string
+	hasFullOutput: boolean
+	intention?: string
+	kind: 'task_completed'
+	receivedAtMs: number
+	taskId: number
+	taskType: string
+	timestampSec: number
+	type: 'runtime'
+	utcOffsetMin: number
 }
 
-export interface RuntimeScheduledWakeEvent {
-  type: 'runtime';
-  kind: 'scheduled_wake';
-  chatId: string;
-  receivedAtMs: number;
-  timestampSec: number;
-  utcOffsetMin: number;
-  scheduleId: number;
-  instruction: string;
+export interface RuntimeScheduleTriggeredEvent {
+	chatId: string
+	instruction: string
+	kind: 'schedule_triggered'
+	receivedAtMs: number
+	scheduleId: number
+	scheduleName?: string
+	timestampSec: number
+	type: 'runtime'
+	utcOffsetMin: number
 }
 
-export type RuntimeEvent = RuntimeTaskCompletedEvent | RuntimeScheduledWakeEvent;
+export type RuntimeEvent = RuntimeScheduleTriggeredEvent | RuntimeTaskCompletedEvent
 
 export interface RuntimeTaskCompletedData {
-  kind: 'task_completed';
-  taskId: number;
-  taskType: string;
-  intention?: string;
-  finalSummary: string;
-  hasFullOutput: boolean;
+	finalSummary: string
+	hasFullOutput: boolean
+	intention?: string
+	kind: 'task_completed'
+	taskId: number
+	taskType: string
 }
 
-export interface RuntimeScheduledWakeData {
-  kind: 'scheduled_wake';
-  scheduleId: number;
-  instruction: string;
+export interface RuntimeScheduleTriggeredData {
+	instruction: string
+	kind: 'schedule_triggered'
+	scheduleId: number
+	scheduleName?: string
 }
 
-export type RuntimeEventData = RuntimeTaskCompletedData | RuntimeScheduledWakeData;
+export type RuntimeEventData = RuntimeScheduleTriggeredData | RuntimeTaskCompletedData
 
-export const buildScheduledWakeRuntimeEvent = (params: {
-  chatId: string;
-  scheduleId: number;
-  instruction: string;
-  receivedAtMs?: number;
-  utcOffsetMin?: number;
-}): RuntimeScheduledWakeEvent => {
-  const receivedAtMs = params.receivedAtMs ?? Date.now();
-  return {
-    type: 'runtime',
-    kind: 'scheduled_wake',
-    chatId: params.chatId,
-    receivedAtMs,
-    timestampSec: Math.floor(receivedAtMs / 1000),
-    utcOffsetMin: params.utcOffsetMin ?? -new Date().getTimezoneOffset(),
-    scheduleId: params.scheduleId,
-    instruction: params.instruction,
-  };
-};
+export function buildScheduleTriggeredRuntimeEvent(params: {
+	chatId: string
+	instruction: string
+	receivedAtMs?: number
+	scheduleId: number
+	scheduleName?: string
+	utcOffsetMin?: number
+}): RuntimeScheduleTriggeredEvent {
+	const receivedAtMs = params.receivedAtMs ?? Date.now()
+	return {
+		chatId: params.chatId,
+		instruction: params.instruction,
+		kind: 'schedule_triggered',
+		receivedAtMs,
+		scheduleId: params.scheduleId,
+		scheduleName: params.scheduleName,
+		timestampSec: Math.floor(receivedAtMs / 1000),
+		type: 'runtime',
+		utcOffsetMin: params.utcOffsetMin ?? -new Date().getTimezoneOffset(),
+	}
+}

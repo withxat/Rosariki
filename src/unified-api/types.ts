@@ -1,4 +1,4 @@
-import type { Sharp } from 'sharp';
+import type { Sharp } from 'sharp'
 
 /**
  * Unified IR invariants (hold across all producers and consumers):
@@ -24,73 +24,75 @@ import type { Sharp } from 'sharp';
  *   stays symmetric.
  */
 
-export type ExtraSource = 'openaiChatCompletion' | 'openaiResponses' | 'anthropicMessages';
+export type ExtraSource = 'anthropicMessages' | 'openaiChatCompletion' | 'openaiResponses'
 
 /** Source-tagged container of provider-specific unknown fields. See IR invariants above. */
-export type Extra<S extends ExtraSource = ExtraSource> = {
-  readonly source: S;
-  readonly fields: Record<string, unknown>;
-};
+export interface Extra<S extends ExtraSource = ExtraSource> {
+	readonly fields: Record<string, unknown>
+	readonly source: S
+}
 
 export interface ThinkingData {
-  type: 'thinking';
-  thinking: string;
-  signature?: string;
+	signature?: string
+	thinking: string
+	type: 'thinking'
 }
 
 export interface RedactedThinkingData {
-  type: 'redacted_thinking';
-  data: string;
+	data: string
+	type: 'redacted_thinking'
 }
 
 export interface ResponsesReasoningData {
-  type: 'reasoning';
-  id: string;
-  summary: { type: 'summary_text'; text: string }[];
-  encrypted_content?: string;
+	encrypted_content?: string
+	id: string
+	summary: { text: string, type: 'summary_text' }[]
+	type: 'reasoning'
 }
 
-export type ReasoningData =
-  | { source: 'openaiChatCompletion'; data: ThinkingData | RedactedThinkingData }
-  | { source: 'openaiResponses'; data: ResponsesReasoningData }
-  | { source: 'anthropicMessages'; data: ThinkingData | RedactedThinkingData };
+export type ReasoningData
+	= | { data: RedactedThinkingData | ThinkingData, source: 'anthropicMessages' }
+		| { data: RedactedThinkingData | ThinkingData, source: 'openaiChatCompletion' }
+		| { data: ResponsesReasoningData, source: 'openaiResponses' }
 
 /** Only Chat Completions produces message-level reasoning. Field aliases vary. */
 export interface MessageReasoning {
-  reasoning_content?: string;
-  reasoning?: string;
-  reasoning_text?: string;
-  reasoning_opaque?: string;
+	reasoning?: string
+	reasoning_content?: string
+	reasoning_opaque?: string
+	reasoning_text?: string
 }
 
 export interface TextPart {
-  kind: 'text';
-  text: string;
-  /** `true` marks Responses `refusal` blocks so round-trip preserves the block type. */
-  refusal?: true;
-  extra?: Extra;
+	extra?: Extra
+	kind: 'text'
+	/** `true` marks Responses `refusal` blocks so round-trip preserves the block type. */
+	refusal?: true
+	text: string
 }
 
 export interface ImagePart {
-  kind: 'image';
-  image: Sharp;
-  detail: 'high' | 'low' | undefined;
+	detail: 'high' | 'low' | undefined
+	image: Sharp
+	kind: 'image'
 }
 
 export interface ToolCallPart {
-  kind: 'toolCall';
-  callId: string;
-  name: string;
-  /** Raw JSON string from the wire. Anthropic input is stringified at the boundary;
-   *  emission back to Anthropic parses and falls back to `{}` on invalid JSON. */
-  args: string;
-  extra?: Extra;
+	/**
+	 * Raw JSON string from the wire. Anthropic input is stringified at the boundary;
+	 *  emission back to Anthropic parses and falls back to `{}` on invalid JSON.
+	 */
+	args: string
+	callId: string
+	extra?: Extra
+	kind: 'toolCall'
+	name: string
 }
 
 export interface ReasoningPart {
-  kind: 'reasoning';
-  data: ReasoningData;
-  extra?: Extra;
+	data: ReasoningData
+	extra?: Extra
+	kind: 'reasoning'
 }
 
 /**
@@ -99,36 +101,36 @@ export interface ReasoningPart {
  * Anthropic don't emit this; cross-format conversion flattens to TextPart[].
  */
 export interface TextGroupPart {
-  kind: 'textGroup';
-  content: TextPart[];
-  extra?: Extra<'openaiResponses'>;
+	content: TextPart[]
+	extra?: Extra<'openaiResponses'>
+	kind: 'textGroup'
 }
 
-export type InputPart = TextPart | ImagePart;
+export type InputPart = ImagePart | TextPart
 
-export type OutputPart = TextPart | ToolCallPart | ReasoningPart | TextGroupPart;
+export type OutputPart = ReasoningPart | TextGroupPart | TextPart | ToolCallPart
 
 export interface InputMessage {
-  kind: 'message';
-  role: 'system' | 'user';
-  parts: InputPart[];
+	kind: 'message'
+	parts: InputPart[]
+	role: 'system' | 'user'
 }
 
 export interface OutputMessage {
-  kind: 'message';
-  role: 'assistant';
-  parts: OutputPart[];
-  reasoning: MessageReasoning | undefined;
-  extra?: Extra;
+	extra?: Extra
+	kind: 'message'
+	parts: OutputPart[]
+	reasoning: MessageReasoning | undefined
+	role: 'assistant'
 }
 
-export type Message = InputMessage | OutputMessage;
+export type Message = InputMessage | OutputMessage
 
 export interface ToolResult {
-  kind: 'toolResult';
-  callId: string;
-  payload: string | InputPart[];
-  requiresFollowUp: boolean;
+	callId: string
+	kind: 'toolResult'
+	payload: InputPart[] | string
+	requiresFollowUp: boolean
 }
 
-export type ConversationEntry = Message | ToolResult;
+export type ConversationEntry = Message | ToolResult

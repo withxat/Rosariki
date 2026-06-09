@@ -1,235 +1,235 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import type { CanonicalAttachment, CanonicalForwardInfo, CanonicalUser, ContentNode, ServiceAction } from '../adaptation/types'
+import type { RuntimeEventData } from '../runtime-event'
+import type { Recurrence } from '../schedule/types'
 
-import type { CanonicalAttachment, CanonicalForwardInfo, CanonicalUser, ContentNode, ServiceAction } from '../adaptation/types';
-import type { RuntimeEventData } from '../runtime-event';
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 /** Legacy Telegram `messages` table JSON shapes (historical rows only). */
 export interface LegacyMessageEntity {
-  type: string;
-  offset: number;
-  length: number;
-  [key: string]: unknown;
+	[key: string]: unknown
+	length: number
+	offset: number
+	type: string
 }
 
 export interface LegacyAttachment {
-  type: string;
-  fileId?: string;
-  mimeType?: string;
-  [key: string]: unknown;
+	[key: string]: unknown
+	fileId?: string
+	mimeType?: string
+	type: string
 }
 
 export interface LegacyForwardInfo {
-  fromUserId?: string;
-  fromChatId?: string;
-  date?: number;
-  [key: string]: unknown;
+	[key: string]: unknown
+	date?: number
+	fromChatId?: string
+	fromUserId?: string
 }
 
-type AnyMsg = Record<string, any>;
+type AnyMsg = Record<string, any>
 
 export const users = sqliteTable('users', {
-  id: text('id').primaryKey(),
-  firstName: text('first_name').notNull(),
-  lastName: text('last_name'),
-  username: text('username'),
-  isBot: integer('is_bot', { mode: 'boolean' }).notNull(),
-  isPremium: integer('is_premium', { mode: 'boolean' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-});
+	firstName: text('first_name').notNull(),
+	id: text('id').primaryKey(),
+	isBot: integer('is_bot', { mode: 'boolean' }).notNull(),
+	isPremium: integer('is_premium', { mode: 'boolean' }).notNull(),
+	lastName: text('last_name'),
+	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+	username: text('username'),
+})
 
 export const messages = sqliteTable('messages', {
-  // Composite natural key: (chatId, messageId)
-  chatId: text('chat_id').notNull(),
-  messageId: integer('message_id').notNull(),
+	// Media attachments — JSON array
+	attachments: text('attachments', { mode: 'json' }).$type<LegacyAttachment[]>(),
+	// Composite natural key: (chatId, messageId)
+	chatId: text('chat_id').notNull(),
 
-  senderId: text('sender_id').references(() => users.id),
-  date: integer('date').notNull(),
-  editDate: integer('edit_date'),
-  text: text('text'),
+	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+	date: integer('date').notNull(),
+	deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+	editDate: integer('edit_date'),
 
-  // Formatted text entities (bold, links, mentions, etc.) — stored as JSON
-  entities: text('entities', { mode: 'json' }).$type<LegacyMessageEntity[]>(),
+	// Formatted text entities (bold, links, mentions, etc.) — stored as JSON
+	entities: text('entities', { mode: 'json' }).$type<LegacyMessageEntity[]>(),
 
-  // Reply & thread context
-  replyToMessageId: integer('reply_to_message_id'),
-  replyToTopId: integer('reply_to_top_id'),
+	// Forward info — stored as JSON since the shape varies
+	// (forwarded from user vs channel vs hidden, etc.)
+	forwardInfo: text('forward_info', { mode: 'json' }).$type<LegacyForwardInfo>(),
+	// Media group (multiple photos/videos sent as album)
+	mediaGroupId: text('media_group_id'),
 
-  // Forward info — stored as JSON since the shape varies
-  // (forwarded from user vs channel vs hidden, etc.)
-  forwardInfo: text('forward_info', { mode: 'json' }).$type<LegacyForwardInfo>(),
+	messageId: integer('message_id').notNull(),
 
-  // Media group (multiple photos/videos sent as album)
-  mediaGroupId: text('media_group_id'),
+	// Reply & thread context
+	replyToMessageId: integer('reply_to_message_id'),
 
-  // Sent via inline bot
-  viaBotId: text('via_bot_id'),
+	replyToTopId: integer('reply_to_top_id'),
 
-  // Media attachments — JSON array
-  attachments: text('attachments', { mode: 'json' }).$type<LegacyAttachment[]>(),
+	senderId: text('sender_id').references(() => users.id),
 
-  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+	text: text('text'),
 
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+	// Sent via inline bot
+	viaBotId: text('via_bot_id'),
 }, table => [
-  uniqueIndex('messages_chat_message_idx').on(table.chatId, table.messageId),
-]);
+	uniqueIndex('messages_chat_message_idx').on(table.chatId, table.messageId),
+])
 
 export const events = sqliteTable('events', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+	attachments: text('attachments', { mode: 'json' }).$type<CanonicalAttachment[]>(),
 
-  chatId: text('chat_id').notNull(),
-  type: text('type').notNull().$type<'message' | 'edit' | 'delete' | 'service' | 'runtime'>(),
-  receivedAtMs: integer('received_at').notNull(),
-  timestampSec: integer('timestamp').notNull(),
-  utcOffsetMin: integer('utc_offset_min').notNull().default(480),
+	chatId: text('chat_id').notNull(),
+	content: text('content', { mode: 'json' }).$type<ContentNode[]>(),
+	forwardInfo: text('forward_info', { mode: 'json' }).$type<CanonicalForwardInfo>(),
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	// Bot's own sent messages — marked at creation time, not derived from sender ID
+	isSelfSent: integer('is_self_sent', { mode: 'boolean' }),
 
-  // message/edit only (canonical string IDs)
-  messageId: text('message_id'),
-  senderId: text('sender_id'),
-  // Denormalized plain text for SQL search — derived from content at persist time
-  text: text('text'),
+	// message/edit only (canonical string IDs)
+	messageId: text('message_id'),
+	// delete only (canonical string IDs)
+	messageIds: text('message_ids', { mode: 'json' }).$type<string[]>(),
+	receivedAtMs: integer('received_at').notNull(),
 
-  // delete only (canonical string IDs)
-  messageIds: text('message_ids', { mode: 'json' }).$type<string[]>(),
+	// message only (canonical string ID)
+	replyToMessageId: text('reply_to_message_id'),
 
-  // JSON fields
-  sender: text('sender', { mode: 'json' }).$type<CanonicalUser>(),
-  content: text('content', { mode: 'json' }).$type<ContentNode[]>(),
-  attachments: text('attachments', { mode: 'json' }).$type<CanonicalAttachment[]>(),
+	// Runtime event data — JSON for runtime-originated events
+	runtimeData: text('runtime_data', { mode: 'json' }).$type<RuntimeEventData>(),
+	// JSON fields
+	sender: text('sender', { mode: 'json' }).$type<CanonicalUser>(),
+	senderId: text('sender_id'),
 
-  // message only (canonical string ID)
-  replyToMessageId: text('reply_to_message_id'),
-  forwardInfo: text('forward_info', { mode: 'json' }).$type<CanonicalForwardInfo>(),
+	// Service event action — JSON discriminated union
+	serviceAction: text('service_action', { mode: 'json' }).$type<ServiceAction>(),
+	// Denormalized plain text for SQL search — derived from content at persist time
+	text: text('text'),
 
-  // Bot's own sent messages — marked at creation time, not derived from sender ID
-  isSelfSent: integer('is_self_sent', { mode: 'boolean' }),
+	timestampSec: integer('timestamp').notNull(),
 
-  // Service event action — JSON discriminated union
-  serviceAction: text('service_action', { mode: 'json' }).$type<ServiceAction>(),
+	type: text('type').notNull().$type<'delete' | 'edit' | 'message' | 'runtime' | 'service'>(),
 
-  // Runtime event data — JSON for runtime-originated events
-  runtimeData: text('runtime_data', { mode: 'json' }).$type<RuntimeEventData>(),
+	utcOffsetMin: integer('utc_offset_min').notNull().default(480),
 }, table => [
-  index('events_chat_id_idx').on(table.chatId),
-]);
+	index('events_chat_id_idx').on(table.chatId),
+])
 
 export const turnResponses = sqliteTable('turn_responses', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  chatId: text('chat_id').notNull(),
-  requestedAt: integer('requested_at').notNull(),
-  provider: text('provider').notNull(),
-  data: text('data', { mode: 'json' }).notNull().$type<unknown[]>(),
-  sessionMeta: text('session_meta', { mode: 'json' }),
-  inputTokens: integer('input_tokens').notNull(),
-  outputTokens: integer('output_tokens').notNull(),
-  reasoningSignatureCompat: text('reasoning_signature_compat').default(''),
+	chatId: text('chat_id').notNull(),
+	data: text('data', { mode: 'json' }).notNull().$type<unknown[]>(),
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	inputTokens: integer('input_tokens').notNull(),
+	outputTokens: integer('output_tokens').notNull(),
+	provider: text('provider').notNull(),
+	reasoningSignatureCompat: text('reasoning_signature_compat').default(''),
+	requestedAt: integer('requested_at').notNull(),
+	sessionMeta: text('session_meta', { mode: 'json' }),
 }, table => [
-  index('turn_responses_chat_requested_idx').on(table.chatId, table.requestedAt),
-]);
+	index('turn_responses_chat_requested_idx').on(table.chatId, table.requestedAt),
+])
 
 export const turnResponsesV2 = sqliteTable('turn_responses_v2', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  chatId: text('chat_id').notNull(),
-  requestedAt: integer('requested_at').notNull(),
-  entries: text('entries').notNull(),
-  // inputTokens / outputTokens are TOTALS as billed — for Anthropic this means
-  // we add cache_creation_input_tokens + cache_read_input_tokens to the API's
-  // input_tokens (which only counts uncached input). cacheRead/cacheWriteTokens
-  // are the cache-hit / cache-write components inside inputTokens.
-  inputTokens: integer('input_tokens').notNull(),
-  outputTokens: integer('output_tokens').notNull(),
-  cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
-  cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
-  modelName: text('model_name').notNull().default(''),
+	cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+	cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
+	chatId: text('chat_id').notNull(),
+	entries: text('entries').notNull(),
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	// inputTokens / outputTokens are TOTALS as billed — for Anthropic this means
+	// we add cache_creation_input_tokens + cache_read_input_tokens to the API's
+	// input_tokens (which only counts uncached input). cacheRead/cacheWriteTokens
+	// are the cache-hit / cache-write components inside inputTokens.
+	inputTokens: integer('input_tokens').notNull(),
+	modelName: text('model_name').notNull().default(''),
+	outputTokens: integer('output_tokens').notNull(),
+	requestedAt: integer('requested_at').notNull(),
 }, table => [
-  index('turn_responses_v2_chat_requested_idx').on(table.chatId, table.requestedAt),
-]);
+	index('turn_responses_v2_chat_requested_idx').on(table.chatId, table.requestedAt),
+])
 
 export const probeResponsesV2 = sqliteTable('probe_responses_v2', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  chatId: text('chat_id').notNull(),
-  requestedAt: integer('requested_at').notNull(),
-  entries: text('entries').notNull(),
-  inputTokens: integer('input_tokens').notNull(),
-  outputTokens: integer('output_tokens').notNull(),
-  cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
-  cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
-  modelName: text('model_name').notNull().default(''),
-  isActivated: integer('is_activated', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('created_at').notNull(),
+	cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+	cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
+	chatId: text('chat_id').notNull(),
+	createdAt: integer('created_at').notNull(),
+	entries: text('entries').notNull(),
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	inputTokens: integer('input_tokens').notNull(),
+	isActivated: integer('is_activated', { mode: 'boolean' }).notNull().default(false),
+	modelName: text('model_name').notNull().default(''),
+	outputTokens: integer('output_tokens').notNull(),
+	requestedAt: integer('requested_at').notNull(),
 }, table => [
-  index('probe_responses_v2_chat_idx').on(table.chatId),
-]);
+	index('probe_responses_v2_chat_idx').on(table.chatId),
+])
 
 export const compactions = sqliteTable('compactions', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  chatId: text('chat_id').notNull(),
-  oldCursorMs: integer('old_cursor_ms').notNull(),
-  newCursorMs: integer('new_cursor_ms').notNull(),
-  summary: text('summary').notNull(),
-  inputTokens: integer('input_tokens').notNull().default(0),
-  outputTokens: integer('output_tokens').notNull().default(0),
-  cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
-  cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
-  createdAt: integer('created_at').notNull(),
+	cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+	cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
+	chatId: text('chat_id').notNull(),
+	createdAt: integer('created_at').notNull(),
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	inputTokens: integer('input_tokens').notNull().default(0),
+	newCursorMs: integer('new_cursor_ms').notNull(),
+	oldCursorMs: integer('old_cursor_ms').notNull(),
+	outputTokens: integer('output_tokens').notNull().default(0),
+	summary: text('summary').notNull(),
 }, table => [
-  index('compactions_chat_id_idx').on(table.chatId),
-]);
+	index('compactions_chat_id_idx').on(table.chatId),
+])
 
 export const probeResponses = sqliteTable('probe_responses', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  chatId: text('chat_id').notNull(),
-  requestedAt: integer('requested_at').notNull(),
-  provider: text('provider').notNull(),
-  data: text('data', { mode: 'json' }).notNull().$type<AnyMsg[]>(),
-  inputTokens: integer('input_tokens').notNull(),
-  outputTokens: integer('output_tokens').notNull(),
-  reasoningSignatureCompat: text('reasoning_signature_compat').default(''),
-  isActivated: integer('is_activated', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('created_at').notNull(),
+	chatId: text('chat_id').notNull(),
+	createdAt: integer('created_at').notNull(),
+	data: text('data', { mode: 'json' }).notNull().$type<AnyMsg[]>(),
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	inputTokens: integer('input_tokens').notNull(),
+	isActivated: integer('is_activated', { mode: 'boolean' }).notNull().default(false),
+	outputTokens: integer('output_tokens').notNull(),
+	provider: text('provider').notNull(),
+	reasoningSignatureCompat: text('reasoning_signature_compat').default(''),
+	requestedAt: integer('requested_at').notNull(),
 }, table => [
-  index('probe_responses_chat_idx').on(table.chatId),
-]);
+	index('probe_responses_chat_idx').on(table.chatId),
+])
 
 export const imageAltTexts = sqliteTable('image_alt_texts', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  imageHash: text('image_hash').notNull(),
-  altText: text('alt_text').notNull(),
-  altTextTokens: integer('alt_text_tokens').notNull(),
-  stickerSetName: text('sticker_set_name'),
-  createdAt: integer('created_at').notNull(),
+	altText: text('alt_text').notNull(),
+	altTextTokens: integer('alt_text_tokens').notNull(),
+	createdAt: integer('created_at').notNull(),
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	imageHash: text('image_hash').notNull(),
+	stickerSetName: text('sticker_set_name'),
 }, table => [
-  uniqueIndex('image_alt_texts_hash_idx').on(table.imageHash),
-]);
+	uniqueIndex('image_alt_texts_hash_idx').on(table.imageHash),
+])
 
-export const scheduledWakes = sqliteTable('scheduled_wakes', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  chatId: text('chat_id').notNull(),
-  runAtMs: integer('run_at_ms').notNull(),
-  instruction: text('instruction').notNull(),
-  repeatIntervalMs: integer('repeat_interval_ms'),
-  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-  createdAtMs: integer('created_at_ms').notNull(),
-  lastFiredAtMs: integer('last_fired_at_ms'),
+export const scheduledTasks = sqliteTable('scheduled_tasks', {
+	chatId: text('chat_id').notNull(),
+	createdAtMs: integer('created_at_ms').notNull(),
+	enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	instruction: text('instruction').notNull(),
+	lastFiredLocalDate: text('last_fired_local_date'),
+	name: text('name'),
+	recurrence: text('recurrence', { mode: 'json' }).notNull().$type<Recurrence>(),
 }, table => [
-  index('scheduled_wakes_run_at_idx').on(table.runAtMs),
-  index('scheduled_wakes_chat_id_idx').on(table.chatId),
-]);
+	index('scheduled_tasks_chat_id_idx').on(table.chatId),
+])
 
 export const backgroundTasks = sqliteTable('background_tasks', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  sessionId: text('session_id').notNull(),
-  typeName: text('type_name').notNull(),
-  intention: text('intention'),
-  timeoutMs: integer('timeout_ms').notNull(),
-  completed: integer('completed', { mode: 'boolean' }).notNull().default(false),
-  params: text('params', { mode: 'json' }).notNull().$type<unknown>(),
-  checkpoint: text('checkpoint', { mode: 'json' }).$type<unknown>(),
-  startedMs: integer('started_ms').notNull(),
-  lastUpdatedMs: integer('last_updated_ms').notNull(),
-  finalSummary: text('final_summary'),
-  fullOutputPath: text('full_output_path'),
+	checkpoint: text('checkpoint', { mode: 'json' }).$type<unknown>(),
+	completed: integer('completed', { mode: 'boolean' }).notNull().default(false),
+	finalSummary: text('final_summary'),
+	fullOutputPath: text('full_output_path'),
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	intention: text('intention'),
+	lastUpdatedMs: integer('last_updated_ms').notNull(),
+	params: text('params', { mode: 'json' }).notNull().$type<unknown>(),
+	sessionId: text('session_id').notNull(),
+	startedMs: integer('started_ms').notNull(),
+	timeoutMs: integer('timeout_ms').notNull(),
+	typeName: text('type_name').notNull(),
 }, table => [
-  index('background_tasks_session_idx').on(table.sessionId),
-  index('background_tasks_completed_idx').on(table.completed),
-]);
+	index('background_tasks_session_idx').on(table.sessionId),
+	index('background_tasks_completed_idx').on(table.completed),
+])

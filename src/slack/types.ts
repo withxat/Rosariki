@@ -1,74 +1,87 @@
 export interface SlackUser {
-  id: string;
-  displayName: string;
-  username?: string;
-  isBot: boolean;
+	displayName: string
+	id: string
+	isBot: boolean
+	username?: string
 }
 
 export interface SlackFileAttachment {
-  id: string;
-  name?: string;
-  title?: string;
-  mimeType?: string;
-  fileType?: string;
-  urlPrivate?: string;
-  size?: number;
-  width?: number;
-  height?: number;
-  duration?: number;
-  thumbnailWebp?: string;
+	duration?: number
+	fileType?: string
+	height?: number
+	id: string
+	mimeType?: string
+	name?: string
+	size?: number
+	thumbnailWebp?: string
+	title?: string
+	urlPrivate?: string
+	width?: number
 }
 
 export interface SlackMessage {
-  messageId: string;
-  chatId: string;
-  sender?: SlackUser;
-  date: number;
-  text: string;
-  files?: SlackFileAttachment[];
-  replyToMessageId?: string;
-  receivedAtMs?: number;
-  utcOffsetMin?: number;
+	chatId: string
+	date: number
+	files?: SlackFileAttachment[]
+	messageId: string
+	receivedAtMs?: number
+	replyToMessageId?: string
+	sender?: SlackUser
+	text: string
+	utcOffsetMin?: number
 }
 
 export interface SlackMessageEdit {
-  messageId: string;
-  chatId: string;
-  sender?: SlackUser;
-  date: number;
-  editDate: number;
-  text: string;
-  files?: SlackFileAttachment[];
-  receivedAtMs?: number;
-  utcOffsetMin?: number;
+	chatId: string
+	date: number
+	editDate: number
+	files?: SlackFileAttachment[]
+	messageId: string
+	receivedAtMs?: number
+	sender?: SlackUser
+	text: string
+	utcOffsetMin?: number
 }
 
 export interface SlackMessageDelete {
-  messageIds: string[];
-  chatId: string;
-  receivedAtMs?: number;
-  utcOffsetMin?: number;
+	chatId: string
+	messageIds: string[]
+	receivedAtMs?: number
+	utcOffsetMin?: number
 }
 
 export interface SlackReactionEvent {
-  messageId: string;
-  chatId: string;
-  sender?: SlackUser;
-  reaction: string;
-  operation: 'added' | 'removed';
-  receivedAtMs?: number;
-  utcOffsetMin?: number;
+	chatId: string
+	messageId: string
+	operation: 'added' | 'removed'
+	reaction: string
+	receivedAtMs?: number
+	sender?: SlackUser
+	utcOffsetMin?: number
 }
 
 export interface SlackSentMessage {
-  messageId: string;
-  date: number;
-  text: string;
+	date: number
+	messageId: string
+	text: string
 }
 
 export interface SlackThreadReply {
-  messageId: string;
-  sender?: SlackUser;
-  text: string;
-  date: number;
+	date: number
+	messageId: string
+	sender?: SlackUser
+	text: string
+}
+
+export interface SlackEmojiListOptions {
+	includeStandard?: boolean
+	includeUrls?: boolean
+	limit?: number
+	query?: string
+}
+
+export interface SlackCanvasLookupOptions {
+	canvasId: string
+	containsText?: string
+	sectionTypes?: Array<'any_header' | 'h1' | 'h2' | 'h3'>
 }

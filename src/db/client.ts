@@ -1,44 +1,46 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import type { Logger } from '@guiiai/logg'
 
-import type { Logger } from '@guiiai/logg';
-import Database from 'better-sqlite3';
-import { sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
-import * as schema from './schema';
+import Database from 'better-sqlite3'
+import { sql } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 
-export type DB = ReturnType<typeof createDatabase>;
+import * as schema from './schema'
 
-export const createDatabase = (dbPath: string, logger: Logger) => {
-  const log = logger.withContext('db');
+export type DB = ReturnType<typeof createDatabase>
 
-  const dir = path.dirname(dbPath);
-  fs.mkdirSync(dir, { recursive: true });
+export function createDatabase(dbPath: string, logger: Logger) {
+	const log = logger.withContext('db')
 
-  const sqlite = new Database(dbPath);
-  sqlite.pragma('journal_mode = WAL');
+	const dir = path.dirname(dbPath)
+	fs.mkdirSync(dir, { recursive: true })
 
-  const db = drizzle(sqlite, { schema });
+	const sqlite = new Database(dbPath)
+	sqlite.pragma('journal_mode = WAL')
 
-  log.withFields({ path: dbPath }).log('Database opened');
+	const db = drizzle(sqlite, { schema })
 
-  return db;
-};
+	log.withFields({ path: dbPath }).log('Database opened')
 
-export const runMigrations = (db: DB, logger: Logger) => {
-  const log = logger.withContext('db');
+	return db
+}
 
-  // foreign_keys must be OFF during migrations (DDL may drop/recreate referenced tables)
-  // and cannot be toggled inside a transaction, so we set it before Drizzle's BEGIN
-  db.run(sql`PRAGMA foreign_keys = OFF`);
+export function runMigrations(db: DB, logger: Logger) {
+	const log = logger.withContext('db')
 
-  try {
-    log.log('Running migrations...');
-    migrate(db, { migrationsFolder: './drizzle' });
-    log.log('Migrations complete');
-  } finally {
-    db.run(sql`PRAGMA foreign_keys = ON`);
-  }
-};
+	// foreign_keys must be OFF during migrations (DDL may drop/recreate referenced tables)
+	// and cannot be toggled inside a transaction, so we set it before Drizzle's BEGIN
+	db.run(sql`PRAGMA foreign_keys = OFF`)
+
+	try {
+		log.log('Running migrations...')
+		migrate(db, { migrationsFolder: './drizzle' })
+		log.log('Migrations complete')
+	}
+	finally {
+		db.run(sql`PRAGMA foreign_keys = ON`)
+	}
+}

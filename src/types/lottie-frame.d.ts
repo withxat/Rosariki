@@ -1,15 +1,17 @@
 declare module 'lottie-frame' {
-  export function exportFrame(data: Buffer, options: {
-    frame: number;
-    width: number;
-    height: number;
-    quality?: number;
-  }): Promise<Buffer>;
+	import type { Buffer } from 'node:buffer'
 
-  export function exportFrameSync(data: Buffer, options: {
-    frame: number;
-    width: number;
-    height: number;
-    quality?: number;
-  }): Buffer;
+	export function exportFrame(data: Buffer, options: {
+		frame: number
+		height: number
+		quality?: number
+		width: number
+	}): Promise<Buffer>
+
+	export function exportFrameSync(data: Buffer, options: {
+		frame: number
+		height: number
+		quality?: number
+		width: number
+	}): Buffer
 }

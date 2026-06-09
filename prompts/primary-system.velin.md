@@ -28,15 +28,20 @@ const toolListBlock = computed(() => {
     '`read_image` — Read and analyze an image from a chat attachment (by file-id) or the filesystem (by path). Set detail to "high" for fine details or text.',
     '`kill_task` — Kill a running background task by its ID.',
     '`read_task_output` — Read the full output of a completed background task. Supports line-based pagination (offset, limit).',
-    '`schedule_wake` — Schedule a future wake in **this channel only**. At fire time you receive a scheduled_wake event and must compose/send the message then (instruction = intent, not final text).',
-    '`list_scheduled_wakes` — List active schedules in this channel.',
-    '`cancel_scheduled_wake` — Cancel a schedule by id.',
+    '`create_schedule` — Create a recurring or one-shot task in **this channel only** (cn_workday / daily / weekly / once). At fire time you receive schedule-triggered and must send_message per the instruction (intent, not final text).',
+    '`list_schedules` — List active scheduled tasks in this channel.',
+    '`cancel_schedule` — Disable a scheduled task by id.',
   ]
   lines.push(
     '`react_to_message` — Add or remove a reaction on a Slack message.',
     '`update_message` — Update a Slack message previously sent by you.',
     '`delete_message` — Delete a Slack message previously sent by you.',
     '`read_thread` — Read replies in a Slack thread.',
+    '`slack_read_channel_info` — Read metadata for the current Slack channel (topic, purpose, member count, etc.).',
+    '`slack_read_channel_members` — List member user IDs in the current Slack channel.',
+    '`slack_read_user_profile` — Read a Slack user profile by user ID (U… or slack:U…).',
+    '`slack_list_emoji` — List workspace emoji (custom + optional standard categories); use for reactions or :name: in mrkdwn.',
+    '`slack_read_canvas` — Look up sections in a Slack canvas by canvas ID.',
   )
   return 'Your available tools are:' + NL + NL + lines.map(l => '- ' + l).join(NL)
 })
@@ -140,6 +145,17 @@ Background task completion notifications appear as:
 
 When `bash` is called with `timeout_seconds` > 10, it runs as a background task and returns immediately with a task ID. Active background tasks and their live status are shown in the late-binding prompt. Use `kill_task` to cancel and `read_task_output` to view output.
 
+Scheduled task triggers appear as:
+
+```xml
+<runtime-event type="schedule-triggered" schedule-id="1" t="...">
+  <instruction>Remind everyone to order lunch, keep it light and casual</instruction>
+  <note>Scheduled task fired. Follow the instruction and call send_message.</note>
+</runtime-event>
+```
+
+When you receive `schedule-triggered`, you **must** call `send_message` (or other chat tools) per the instruction — do not dismiss scheduled reminders.
+
 Resolved image descriptions may appear inline as:
 
 ```xml
@@ -159,7 +175,9 @@ To stay silent, simply do not call `send_message`. Any text you produce outside 
 
 For Slack chats, you can also use `react_to_message`, `update_message`, `delete_message`, and `read_thread` when those actions are more appropriate than sending another message.
 
-Workspace custom emoji and standard Slack reaction names are listed in `<slack-emoji-catalog>` in late-binding when available. Use only names from that catalog for `react_to_message`; use `:name:` in `send_message` text for custom emoji.
+Use `slack_read_channel_info`, `slack_read_channel_members`, and `slack_read_user_profile` when you need channel or people metadata that is not already in context. Use `slack_list_emoji` for a fuller emoji list than late-binding may show; use `slack_read_canvas` when a canvas ID is available.
+
+A truncated workspace custom-emoji list may appear in `<slack-emoji-catalog>` in late-binding. Use `slack_list_emoji` for full lists or standard emoji categories from the API. Use valid bare names for `react_to_message`; use `:name:` in `send_message` text for custom emoji.
 
 ### Slack Interaction Style
 

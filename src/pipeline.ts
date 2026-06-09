@@ -1,85 +1,89 @@
-import { createPatch } from 'diff';
+import type { IntermediateContext, PipelineEvent } from './projection'
+import type { RenderedContext, RenderParams } from './rendering'
 
-import { useLogger } from './config/logger';
-import { createEmptyIC, reduce } from './projection';
-import type { PipelineEvent, IntermediateContext } from './projection';
-import { rcToXml, render } from './rendering';
-import type { RenderedContext, RenderParams } from './rendering';
+import { createPatch } from 'diff'
 
-export type { PipelineEvent } from './projection';
+import { useLogger } from './config/logger'
+import { createEmptyIC, reduce } from './projection'
+import { rcToXml, render } from './rendering'
+
+export type { PipelineEvent } from './projection'
 
 // Per-chat IC/RC state manager. Encapsulates the Projection → Rendering
 // pipeline, debug dumping, and diff logging.
-export const createPipeline = (renderParams: RenderParams | ((chatId: string) => RenderParams)) => {
-  const logger = useLogger('pipeline');
-  const renderLogger = useLogger('rendering');
+export function createPipeline(renderParams: ((chatId: string) => RenderParams) | RenderParams) {
+	const logger = useLogger('pipeline')
+	const renderLogger = useLogger('rendering')
 
-  const sessions = new Map<string, IntermediateContext>();
-  const renderedSessions = new Map<string, RenderedContext>();
-  const cursors = new Map<string, number>();
+	const sessions = new Map<string, IntermediateContext>()
+	const renderedSessions = new Map<string, RenderedContext>()
+	const cursors = new Map<string, number>()
 
-  // Compute effective RenderParams for a chat, merging per-chat cursor with base params.
-  const effectiveParams = (chatId: string): RenderParams => {
-    const baseParams = typeof renderParams === 'function' ? renderParams(chatId) : renderParams;
-    const cursor = cursors.get(chatId);
-    return cursor != null ? { ...baseParams, compactCursorMs: cursor } : baseParams;
-  };
+	// Compute effective RenderParams for a chat, merging per-chat cursor with base params.
+	const effectiveParams = (chatId: string): RenderParams => {
+		const baseParams = typeof renderParams === 'function' ? renderParams(chatId) : renderParams
+		const cursor = cursors.get(chatId)
+		return cursor != null ? { ...baseParams, compactCursorMs: cursor } : baseParams
+	}
 
-  const logRendering = (sessionId: string, oldRC: RenderedContext | undefined, newRC: RenderedContext) => {
-    if (!oldRC) return; // Skip full RC log on cold start — too noisy
-    const oldXml = rcToXml(oldRC);
-    const newXml = rcToXml(newRC);
-    if (oldXml === newXml) return;
-    const patch = createPatch(`RC(${sessionId})`, oldXml, newXml, 'before', 'after', { context: 3 });
-    renderLogger.log(`RC diff:\n${patch}`);
-  };
+	const logRendering = (sessionId: string, oldRC: RenderedContext | undefined, newRC: RenderedContext) => {
+		if (!oldRC)
+			return // Skip full RC log on cold start — too noisy
+		const oldXml = rcToXml(oldRC)
+		const newXml = rcToXml(newRC)
+		if (oldXml === newXml)
+			return
+		const patch = createPatch(`RC(${sessionId})`, oldXml, newXml, 'before', 'after', { context: 3 })
+		renderLogger.log(`RC diff:\n${patch}`)
+	}
 
-  // Push a single event through the pipeline: reduce IC → render RC → log diff.
-  const pushEvent = (chatId: string, event: PipelineEvent): RenderedContext => {
-    const oldIC = sessions.get(chatId) ?? createEmptyIC(chatId);
-    const newIC = reduce(oldIC, event);
-    sessions.set(chatId, newIC);
+	// Push a single event through the pipeline: reduce IC → render RC → log diff.
+	const pushEvent = (chatId: string, event: PipelineEvent): RenderedContext => {
+		const oldIC = sessions.get(chatId) ?? createEmptyIC(chatId)
+		const newIC = reduce(oldIC, event)
+		sessions.set(chatId, newIC)
 
-    const oldRC = renderedSessions.get(chatId);
-    const newRC = render(newIC, effectiveParams(chatId));
-    renderedSessions.set(chatId, newRC);
-    logRendering(chatId, oldRC, newRC);
+		const oldRC = renderedSessions.get(chatId)
+		const newRC = render(newIC, effectiveParams(chatId))
+		renderedSessions.set(chatId, newRC)
+		logRendering(chatId, oldRC, newRC)
 
-    return newRC;
-  };
+		return newRC
+	}
 
-  // Cold-start replay: rebuild IC from persisted events, then render RC.
-  const replayChat = (chatId: string, events: PipelineEvent[]): RenderedContext => {
-    let ic = createEmptyIC(chatId);
-    for (const event of events)
-      ic = reduce(ic, event);
-    sessions.set(chatId, ic);
+	// Cold-start replay: rebuild IC from persisted events, then render RC.
+	const replayChat = (chatId: string, events: PipelineEvent[]): RenderedContext => {
+		let ic = createEmptyIC(chatId)
+		for (const event of events)
+			ic = reduce(ic, event)
+		sessions.set(chatId, ic)
 
-    const rc = render(ic, effectiveParams(chatId));
-    renderedSessions.set(chatId, rc);
+		const rc = render(ic, effectiveParams(chatId))
+		renderedSessions.set(chatId, rc)
 
-    logger.withFields({ chatId, events: events.length, nodes: ic.nodes.length, users: ic.users.size }).log('Replayed session');
-    return rc;
-  };
+		logger.withFields({ chatId, events: events.length, nodes: ic.nodes.length, users: ic.users.size }).log('Replayed session')
+		return rc
+	}
 
-  // Update compact cursor for a chat. Re-renders RC with the new cursor so
-  // segments before the cursor are excluded.
-  const setCompactCursor = (chatId: string, cursorMs: number): RenderedContext | undefined => {
-    cursors.set(chatId, cursorMs);
-    const ic = sessions.get(chatId);
-    if (!ic) return;
-    const oldRC = renderedSessions.get(chatId);
-    const rc = render(ic, effectiveParams(chatId));
-    renderedSessions.set(chatId, rc);
-    logRendering(chatId, oldRC, rc);
-    logger.withFields({ chatId, cursorMs }).log('Compact cursor updated');
-    return rc;
-  };
+	// Update compact cursor for a chat. Re-renders RC with the new cursor so
+	// segments before the cursor are excluded.
+	const setCompactCursor = (chatId: string, cursorMs: number): RenderedContext | undefined => {
+		cursors.set(chatId, cursorMs)
+		const ic = sessions.get(chatId)
+		if (!ic)
+			return
+		const oldRC = renderedSessions.get(chatId)
+		const rc = render(ic, effectiveParams(chatId))
+		renderedSessions.set(chatId, rc)
+		logRendering(chatId, oldRC, rc)
+		logger.withFields({ chatId, cursorMs }).log('Compact cursor updated')
+		return rc
+	}
 
-  const getCompactCursor = (chatId: string) => cursors.get(chatId);
-  const getIC = (chatId: string) => sessions.get(chatId);
-  const getRC = (chatId: string) => renderedSessions.get(chatId);
-  const getChatIds = (): string[] => [...renderedSessions.keys()];
+	const getCompactCursor = (chatId: string) => cursors.get(chatId)
+	const getIC = (chatId: string) => sessions.get(chatId)
+	const getRC = (chatId: string) => renderedSessions.get(chatId)
+	const getChatIds = (): string[] => [...renderedSessions.keys()]
 
-  return { pushEvent, replayChat, setCompactCursor, getCompactCursor, getIC, getRC, getChatIds };
-};
+	return { getChatIds, getCompactCursor, getIC, getRC, pushEvent, replayChat, setCompactCursor }
+}

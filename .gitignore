@@ -76,7 +76,6 @@ web_modules/
 
 # YAML config (contains secrets)
 config.yaml
-contacts.json
 agent/IDENTITY.md
 agent/SOUL.md
 

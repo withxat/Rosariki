@@ -1,48 +1,50 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest'
 
 import {
-  parseSlackEmojiList,
-  renderSlackEmojiCatalogXml,
-  SLACK_STANDARD_REACTION_NAMES,
-} from './emoji-catalog';
+	catalogViewFromCache,
+	parseSlackEmojiList,
+	renderSlackEmojiCatalogXml,
+} from './emoji-catalog'
 
 describe('parseSlackEmojiList', () => {
-  it('collects all emoji keys and alias pairs', () => {
-    const parsed = parseSlackEmojiList({
-      party_parrot: 'https://example.com/parrot.gif',
-      parrot: 'party_parrot',
-    });
-    expect(parsed.customNames).toEqual(['parrot', 'party_parrot']);
-    expect(parsed.aliases).toEqual([{ name: 'parrot', aliasOf: 'party_parrot' }]);
-    expect(parsed.totalCustom).toBe(2);
-  });
-});
+	it('collects custom image emoji keys and alias pairs', () => {
+		const parsed = parseSlackEmojiList({
+			eyes: 'unicode-placeholder',
+			parrot: 'party_parrot',
+			party_parrot: 'https://example.com/parrot.gif',
+		})
+		expect(parsed.customNames).toEqual(['party_parrot'])
+		expect(parsed.aliases).toEqual([
+			{ aliasOf: 'unicode-placeholder', name: 'eyes' },
+			{ aliasOf: 'party_parrot', name: 'parrot' },
+		])
+		expect(parsed.totalCustom).toBe(1)
+	})
+})
 
 describe('renderSlackEmojiCatalogXml', () => {
-  it('includes standard and custom names', () => {
-    const xml = renderSlackEmojiCatalogXml({
-      customNames: ['blob_help'],
-      aliases: [],
-      standardReactionNames: SLACK_STANDARD_REACTION_NAMES,
-      totalCustom: 1,
-      truncated: false,
-    });
-    expect(xml).toContain('<slack-emoji-catalog>');
-    expect(xml).toContain('blob_help');
-    expect(xml).toContain('eyes');
-    expect(xml).toContain('react_to_message');
-  });
+	it('includes custom names and slack_list_emoji hint', () => {
+		const xml = renderSlackEmojiCatalogXml({
+			aliases: [],
+			categories: [{ name: 'Smileys' }],
+			customNames: ['blob_help'],
+			totalCustom: 1,
+			truncated: false,
+		})
+		expect(xml).toContain('<slack-emoji-catalog>')
+		expect(xml).toContain('blob_help')
+		expect(xml).toContain('slack_list_emoji')
+		expect(xml).toContain('standard-emoji-categories')
+	})
 
-  it('surfaces load errors', () => {
-    const xml = renderSlackEmojiCatalogXml({
-      customNames: [],
-      aliases: [],
-      standardReactionNames: SLACK_STANDARD_REACTION_NAMES,
-      totalCustom: 0,
-      truncated: false,
-      loadError: 'missing_scope',
-    });
-    expect(xml).toContain('emoji:read');
-    expect(xml).toContain('missing_scope');
-  });
-});
+	it('surfaces load errors', () => {
+		const xml = renderSlackEmojiCatalogXml(catalogViewFromCache({
+			categories: [],
+			data: {},
+			fetchedAt: Date.now(),
+			loadError: 'missing_scope',
+		}))
+		expect(xml).toContain('emoji:read')
+		expect(xml).toContain('missing_scope')
+	})
+})

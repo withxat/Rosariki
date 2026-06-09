@@ -81,11 +81,15 @@ Every `CanonicalIMEvent` carries:
 
 ### Per-channel context (no cross-channel memory)
 
-Each Slack channel ID (`chatId`) has its own IC/RC, `events`, TRs, compactions, probe history, and driver scope. **`contacts` is global** (display names only). Conversation memory does **not** span channels — the model in channel A cannot see channel B unless you add a separate global-memory layer.
+Each Slack channel ID (`chatId`) has its own IC/RC, `events`, TRs, compactions, probe history, and driver scope. Conversation memory does **not** span channels — the model in channel A cannot see channel B unless you add a separate global-memory layer.
 
-### Scheduled wakes (model writes at fire time)
+### Slack user display names
 
-`schedule_wake` / `list_scheduled_wakes` / `cancel_scheduled_wake` persist rows in `scheduled_wakes` (per channel). `src/scheduler/` polls due rows (~15s), emits a `runtime` event `kind: scheduled_wake` with an **instruction** (intent), then the primary model composes and sends via tools — not pre-stored message text. Repeating schedules use `repeat_every_sec` (minimum 60s). Scheduled wakes skip the probe gate (`isRuntimeEvent`). One-shot rows are disabled after fire; repeating rows advance `run_at_ms`.
+Ingress calls `users.info` per message sender → `displayName` / `username` in message XML. Use `slack_read_user_profile` when status, title, or full profile fields are needed.
+
+### Scheduled tasks (calendar recurrence + model writes at fire time)
+
+`create_schedule` / `list_schedules` / `cancel_schedule` persist rows in `scheduled_tasks` (per channel). `src/schedule/` polls enabled tasks every minute, matches `recurrence` (`cn_workday` / `daily` / `weekly` / `once`), and emits `runtime` `kind: schedule_triggered` with an **instruction** (intent). Primary model composes and sends via `send_message`. `cn_workday` uses `chinese-days` (`isWorkday`) for China holidays and调休; **update `chinese-days` annually** when the State Council publishes the next year's calendar (`pnpm update chinese-days`). Idempotency: `last_fired_local_date` prevents duplicate fires on the same local day; missed minute ticks are not backfilled. `once` disables after fire. Skips probe gate (`isScheduleTriggered` / `isRuntimeEvent`).
 
 ### IC mutation semantics
 
@@ -135,7 +139,11 @@ In group chats, run a small `probe.model` first when the bot wasn't recently men
 
 ### Slack emoji catalog
 
-On `slack.init()`, call `emoji.list` (requires `emoji:read`) and inject `<slack-emoji-catalog>` into late-binding: workspace custom names from the API plus a static list of standard reaction names. Used for `react_to_message` and `:name:` in `send_message` mrkdwn.
+Single `emoji.list({ include_categories: true })` cache (5 min TTL) shared by late-binding `<slack-emoji-catalog>` (truncated custom names + alias hints) and `slack_list_emoji` (full/searchable list, optional standard categories from API). Requires `emoji:read`. `emoji_changed` clears the cache.
+
+### Slack metadata tools (on-demand)
+
+Driver registers Slack-only tools so large workspace metadata enters context only when requested: `slack_read_channel_info` (`conversations.info`), `slack_read_channel_members` (`conversations.members`), `slack_read_user_profile` (`users.info` + `users.profile.get`), `slack_list_emoji`, `slack_read_canvas` (`canvases.sections.lookup`). Channel tools use the current `chatId` (raw Slack channel ID). User IDs accept `U…` or `slack:U…`.
 
 ### Slack thread vs channel placement
 
@@ -166,7 +174,7 @@ Driver writes full LLM request JSON to `/tmp/cahciua/<chatId>.request.json` befo
 - **Comments**: only the non-obvious "why" (workarounds, edge cases, decisions).
 - **No speculative code**: leave a `// TODO:` instead of a wrong placeholder.
 - **Error handling**: let errors propagate. No silent `catch` returning empty/default values.
-- **Styling** (ESLint-enforced): 2-space indent, single quotes, semicolons, trailing commas multiline, `1tbs` braces, arrow parens as-needed, Unix line endings.
+- **Styling** (ESLint-enforced via `@withxat/eslint-config`): tab indent, single quotes, no semicolons — see that package for the full rule set.
 
 ## Testing
 
