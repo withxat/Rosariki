@@ -19,4 +19,10 @@ describe('markdownToMrkdwn', () => {
 		expect(markdownToMrkdwn(':smile: hi')).toBe(':smile: hi')
 		expect(markdownToMrkdwn('')).toBe('')
 	})
+
+	it('applies AutoCorrect for CJK/English spacing before mrkdwn conversion', () => {
+		expect(markdownToMrkdwn('Hello你好.')).toBe('Hello 你好。')
+		expect(markdownToMrkdwn('**bold** 和 Hello世界')).toBe('​*bold*​ 和 Hello 世界')
+		expect(markdownToMrkdwn('使用 `code` 和 Hello世界')).toBe('使用 `code` 和 Hello 世界')
+	})
 })

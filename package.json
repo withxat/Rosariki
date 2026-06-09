@@ -27,6 +27,7 @@
 		"@slack/web-api": "^7.16.0",
 		"@velin-dev/core": "^0.4.1",
 		"alien-signals": "^3.2.1",
+		"autocorrect-node": "^2.14.0",
 		"better-sqlite3": "^12.10.0",
 		"chinese-days": "^1.5.9",
 		"diff": "^9.0.0",

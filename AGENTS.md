@@ -147,7 +147,7 @@ Driver registers Slack-only tools so large workspace metadata enters context onl
 
 ### Outbound Markdown → mrkdwn
 
-`send_message` / `update_message` tool args use Markdown (primary-system prompt). `src/slack/markdown-to-mrkdwn.ts` converts to legacy Slack mrkdwn via `slackify-markdown` at the `chat.postMessage` / `chat.update` / file-upload comment boundary (`||spoiler||` → italic; `__underline__` → bold). Inbound parsing remains `parseSlackContent()` in `adapter.ts`.
+`send_message` / `update_message` tool args use Markdown (primary-system prompt). `src/slack/markdown-to-mrkdwn.ts` runs `autocorrect-node` (`formatFor(..., 'md')`) for CJK/English spacing and punctuation, then converts to legacy Slack mrkdwn via `slackify-markdown` at the `chat.postMessage` / `chat.update` / file-upload comment boundary (`||spoiler||` → italic; `__underline__` → bold). Inbound parsing remains `parseSlackContent()` in `adapter.ts`.
 
 ### Slack thread vs channel placement
 
