@@ -140,6 +140,39 @@ function normalizeCompletedResponse(response: CompletedResponsePayload | undefin
 	return response
 }
 
+function resolveFinalOutput(
+	completed: CompletedResponsePayload,
+	streamed: ResponseOutputItem[],
+): ResponseOutputItem[] {
+	const fromCompleted = completed.output
+	if (Array.isArray(fromCompleted) && fromCompleted.length > 0)
+		return fromCompleted
+	if (streamed.length > 0)
+		return streamed
+	return fromCompleted ?? []
+}
+
+function upsertStreamOutputItem(items: ResponseOutputItem[], index: number, item: ResponseOutputItem): void {
+	if (index < 0)
+		return
+	while (items.length <= index)
+		items.push(undefined as unknown as ResponseOutputItem)
+	items[index] = item
+}
+
+function accumulateStreamOutputEvent(items: ResponseOutputItem[], event: Record<string, unknown>): void {
+	const type = event.type
+	if (type !== 'response.output_item.added' && type !== 'response.output_item.done')
+		return
+
+	const index = typeof event.output_index === 'number' ? event.output_index : -1
+	const item = event.item
+	if (index < 0 || typeof item !== 'object' || item == null)
+		return
+
+	upsertStreamOutputItem(items, index, item as ResponseOutputItem)
+}
+
 function parseFriendlyCodexError(status: number, body: string): string {
 	try {
 		const parsed = JSON.parse(body) as {
@@ -210,10 +243,13 @@ export async function codexResponsesApi(params: CodexResponsesApiParams): Promis
 		}
 
 		let completed: CompletedResponsePayload | undefined
+		const streamedOutput: ResponseOutputItem[] = []
 		for await (const event of parseSSE(res)) {
 			const type = typeof event.type === 'string' ? event.type : undefined
 			if (!type)
 				continue
+
+			accumulateStreamOutputEvent(streamedOutput, event)
 
 			if (type === 'error') {
 				const message = typeof event.message === 'string' ? event.message : JSON.stringify(event)
@@ -232,7 +268,7 @@ export async function codexResponsesApi(params: CodexResponsesApiParams): Promis
 		}
 
 		const response = normalizeCompletedResponse(completed)
-		const output = response.output ?? []
+		const output = resolveFinalOutput(response, streamedOutput.filter(Boolean))
 
 		for (const item of output) {
 			if (item.type === 'message') {

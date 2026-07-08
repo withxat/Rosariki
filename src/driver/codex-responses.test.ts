@@ -87,6 +87,58 @@ describe('codexResponsesApi', () => {
 		})
 	})
 
+	it('falls back to streamed output_item events when response.completed output is empty', async () => {
+		const fetchMock = vi.fn(async () => sseResponse([
+			{
+				item: {
+					arguments: '{"text":"hello from codex"}',
+					call_id: 'call_1',
+					name: 'send_message',
+					status: 'completed',
+					type: 'function_call',
+				},
+				output_index: 0,
+				type: 'response.output_item.done',
+			},
+			{
+				response: {
+					output: [],
+					status: 'completed',
+					usage: {
+						input_tokens: 100,
+						output_tokens: 78,
+					},
+				},
+				type: 'response.completed',
+			},
+		]))
+		vi.stubGlobal('fetch', fetchMock)
+
+		const log = {
+			log: vi.fn(),
+			withContext: () => log,
+			withFields: () => log,
+		}
+
+		const result = await codexResponsesApi({
+			accountId: 'acct_test',
+			baseURL: 'https://chatgpt.com/backend-api',
+			input: [{ content: 'hi', role: 'user', type: 'message' }],
+			instructions: 'sys',
+			label: 'test',
+			log: log as never,
+			model: 'gpt-5.5',
+			token: 'test-token',
+		})
+
+		expect(result.output).toHaveLength(1)
+		expect(result.output[0]).toMatchObject({
+			name: 'send_message',
+			type: 'function_call',
+		})
+		expect(result.usage.outputTokens).toBe(78)
+	})
+
 	it('throws friendly usage-limit errors', async () => {
 		vi.stubGlobal('fetch', vi.fn(async () => new Response(
 			JSON.stringify({
