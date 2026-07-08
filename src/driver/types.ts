@@ -1,7 +1,7 @@
 import type { ResolvedChatConfig } from '../config/config'
 import type { ConversationEntry } from '../unified-api/types'
 
-export type ProviderFormat = 'anthropic-messages' | 'openai-chat' | 'responses'
+export type ProviderFormat = 'anthropic-messages' | 'openai-chat' | 'openai-codex-responses' | 'responses'
 
 export interface TurnResponseV2 {
 	cacheReadTokens: number
@@ -29,6 +29,8 @@ export interface LlmEndpoint {
 	apiBaseUrl: string
 	apiFormat?: ProviderFormat
 	apiKey: string
+	authPath?: string
+	forceToolCall?: boolean
 	maxImagesAllowed?: number
 	model: string
 	timeoutSec?: number

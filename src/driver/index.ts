@@ -106,14 +106,16 @@ export function createDriver(config: DriverConfig, deps: {
 	// Runner cache: keyed by "apiBaseUrl::model" to reuse runners across chats
 	// sharing the same endpoint.
 	const runners = new Map<string, ReturnType<typeof createRunner>>()
-	const getOrCreateRunner = (endpoint: { apiBaseUrl: string, apiFormat?: ProviderFormat, apiKey: string, model: string, timeoutSec?: number }) => {
-		const key = `${endpoint.apiBaseUrl}::${endpoint.model}`
+	const getOrCreateRunner = (endpoint: LlmEndpoint) => {
+		const key = `${endpoint.apiFormat ?? 'openai-chat'}::${endpoint.apiBaseUrl}::${endpoint.model}`
 		let runner = runners.get(key)
 		if (!runner) {
 			runner = createRunner({
 				apiBaseUrl: endpoint.apiBaseUrl,
 				apiFormat: endpoint.apiFormat ?? 'openai-chat',
 				apiKey: endpoint.apiKey,
+				authPath: endpoint.authPath,
+				forceToolCall: endpoint.forceToolCall,
 				model: endpoint.model,
 				timeoutSec: endpoint.timeoutSec,
 			})
@@ -509,6 +511,7 @@ export function createDriver(config: DriverConfig, deps: {
 							apiBaseUrl: compactEndpoint.apiBaseUrl,
 							apiFormat: compactEndpoint.apiFormat,
 							apiKey: compactEndpoint.apiKey,
+							authPath: compactEndpoint.authPath,
 							chatId,
 							existingSummary: sum,
 							log,

@@ -3,7 +3,14 @@ models:
     apiBaseUrl: ''
     apiKey: ''
     model: claude-opus-4-6
-    # apiFormat: "responses"        # optional: 'openai-chat' (default), 'responses', or 'anthropic-messages'
+    # apiFormat: "responses"        # optional: 'openai-chat' (default), 'responses', 'anthropic-messages', or 'openai-codex-responses'
+    # OpenAI Codex (ChatGPT Plus/Pro subscription) example:
+    # apiBaseUrl: https://chatgpt.com/backend-api
+    # apiFormat: openai-codex-responses
+    # apiKey: ''                    # unused — OAuth from Codex CLI auth file
+    # model: gpt-5.4-codex          # model id from Codex CLI / pi catalog
+    # authPath: ~/.codex/auth.json  # optional; default is $CODEX_HOME/auth.json (~/.codex/auth.json)
+    # Prerequisite on the host: npm i -g @openai/codex && codex login
     # timeoutSec: 120                # optional: abort requests that stream for too long
     # maxImagesAllowed: 100     # optional: drop oldest images when context exceeds this limit
   probe:

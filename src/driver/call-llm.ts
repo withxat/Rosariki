@@ -7,6 +7,7 @@ import type { ProviderFormat } from './types'
 
 import { writeFileSync } from 'node:fs'
 
+import { resolveCodexAuthSession } from '../auth/openai-codex'
 import {
 	fromChatCompletionsOutput,
 	fromMessagesOutput,
@@ -16,6 +17,7 @@ import {
 	toResponsesInput,
 } from '../unified-api'
 import { chatCompletions } from './chat'
+import { codexResponsesApi } from './codex-responses'
 import { DUMP_DIR } from './constants'
 import { trimImages } from './context'
 import { applyAnthropicCachePoints, messagesApi } from './messages'
@@ -25,6 +27,8 @@ export interface LlmCallConfig {
 	apiBaseUrl: string
 	apiFormat?: ProviderFormat
 	apiKey: string
+	authPath?: string
+	forceToolCall?: boolean
 	model: string
 	timeoutSec?: number
 }
@@ -109,6 +113,38 @@ export async function callLlm(config: LlmCallConfig, entries: ConversationEntry[
 			label,
 			log: log!,
 			timeoutSec: config.timeoutSec,
+		})
+		dump(options?.dumpId, 'response', response)
+
+		const assistantItems = (response.output as unknown as ResponsesAssistantItem[]).filter(item =>
+			item.type === 'message' || item.type === 'function_call' || item.type === 'reasoning')
+		return {
+			entries: fromResponsesOutput(assistantItems),
+			usage: response.usage,
+		}
+	}
+
+	if (apiFormat === 'openai-codex-responses') {
+		const input = await toResponsesInput(prepared)
+		const wireTools = optionalTools(tools?.map(toResponsesToolSchema))
+		const auth = await resolveCodexAuthSession(config.authPath)
+		dump(options?.dumpId, 'request', { authPath: auth.authPath, input, instructions: system, model: config.model, tools: wireTools })
+
+		const response = await codexResponsesApi({
+			accountId: auth.accountId,
+			authPath: auth.authPath,
+			baseURL: config.apiBaseUrl,
+			input,
+			instructions: system,
+			model: config.model,
+			sessionId: options?.dumpId,
+			...(wireTools ? { tools: wireTools } : {}),
+			forceToolCall: config.forceToolCall,
+			label,
+			log: log!,
+			thinking: config.thinking,
+			timeoutSec: config.timeoutSec,
+			token: auth.accessToken,
 		})
 		dump(options?.dumpId, 'response', response)
 

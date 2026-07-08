@@ -9,8 +9,10 @@ import { parse as parseYaml } from 'yaml'
 
 const llmEndpointEntries = {
 	apiBaseUrl: v.string(),
-	apiFormat: v.optional(v.picklist(['openai-chat', 'responses', 'anthropic-messages'])),
-	apiKey: v.string(),
+	apiFormat: v.optional(v.picklist(['openai-chat', 'responses', 'anthropic-messages', 'openai-codex-responses'])),
+	apiKey: v.optional(v.string(), ''),
+	authPath: v.optional(v.string()),
+	forceToolCall: v.optional(v.boolean()),
 	maxImagesAllowed: v.optional(v.number()),
 	model: v.string(),
 	timeoutSec: v.optional(v.number()),

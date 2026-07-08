@@ -13,7 +13,7 @@ Slack group-chat bot built on the **Deterministic Context Pipeline (DCP)**:
 3. **Rendering** (`src/rendering/`): `RC = render(IC, params)` — XML serialization + viewport filtering.
 4. **Driver** (`src/driver/`): merges RC with its own TRs (turn responses) by timestamp, owns tool-call loops, reactive scheduling (alien-signals), compaction, probe gate.
 
-Supports three LLM API formats via direct non-streaming `fetch`: `openai-chat`, `anthropic-messages`, `responses`. TRs are stored in raw provider format; conversion happens only at API boundaries.
+Supports four LLM API formats via direct `fetch`: `openai-chat`, `anthropic-messages`, `responses`, and `openai-codex-responses` (ChatGPT subscription OAuth via Codex CLI `~/.codex/auth.json`). TRs are stored in raw provider format; conversion happens only at API boundaries.
 
 Design goals: KV-cache friendly, group-chat native, autonomous reply (bot decides whether to respond via `send_message` tool call).
 
@@ -114,7 +114,17 @@ Stored TRs keep provider-native IDs. `composeContext()` always remaps IDs to `[A
 
 ### Token statistics (cross-provider normalization)
 
-All `inputTokens`/`outputTokens`/`cacheReadTokens`/`cacheWriteTokens` columns are normalized at the API boundary in `src/driver/{chat,messages,responses}.ts`. See `docs/dcp-design.md` for the cost model.
+All `inputTokens`/`outputTokens`/`cacheReadTokens`/`cacheWriteTokens` columns are normalized at the API boundary in `src/driver/{chat,messages,responses,codex-responses}.ts`:
+
+- `inputTokens` = **total** billable input including cache reads and writes. Anthropic's API returns the uncached remainder only — we add `cache_read_input_tokens + cache_creation_input_tokens` back in to match OpenAI semantics.
+- `cacheReadTokens` ≈ 0.1× base input cost (all providers; DeepSeek's `prompt_cache_hit_tokens` also accepted on chat path).
+- `cacheWriteTokens` Anthropic-only (~1.25× 5min, ~2× 1h — current code uses 1h via `applyAnthropicCachePoints`). OpenAI/Responses always report 0 here.
+
+Downstream code treats the shape uniformly. See `docs/dcp-design.md` for the cost model.
+
+### OpenAI Codex provider (`openai-codex-responses`)
+
+Uses ChatGPT subscription OAuth from Codex CLI's `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`). Host prerequisite: `codex login` on the deployment machine. Cahciua refreshes expired tokens via the same OAuth endpoint and writes the updated file back. Wire format matches Responses API; requests hit `…/codex/responses` with SSE aggregation. `prompt_cache_key` is the chat id.
 
 ### Context optimizations (always on in `composeContext`)
 

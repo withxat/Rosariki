@@ -22,6 +22,7 @@
 	},
 	"dependencies": {
 		"@cfworker/json-schema": "^4.1.1",
+		"@earendil-works/pi-ai": "^0.80.3",
 		"@guiiai/logg": "^1.2.11",
 		"@slack/bolt": "^4.7.3",
 		"@slack/web-api": "^7.16.0",
