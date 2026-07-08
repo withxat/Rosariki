@@ -9,7 +9,7 @@ import type { RenderedContext } from '../rendering/types'
 import type { ToolSchema } from './call-llm'
 import type { ScheduledTaskToolDeps } from './scheduled-task-tools'
 import type { CahciuaTool, ChatInteractionDeps, SendMessageAttachment } from './tools'
-import type { CompactionSessionMeta, DriverConfig, LlmEndpoint, ProbeResponseV2, ProviderFormat, TurnResponseV2 } from './types'
+import type { CompactionSessionMeta, DriverConfig, LlmEndpoint, ProbeResponseV2, TurnResponseV2 } from './types'
 
 import { computed, effect, signal } from 'alien-signals'
 
@@ -19,6 +19,7 @@ import { callLlm } from './call-llm'
 import { runCompaction } from './compaction'
 import { composeContext, findWorkingWindowCursor, injectLateBindingPrompt, latestExternalEventMs, wasToolLoopInterrupted } from './context'
 import { renderLateBindingPrompt, renderSystemPrompt } from './prompt'
+import { createReactionGuardRegistry } from './reaction-guard'
 import { createRunner } from './runner'
 import { createCancelScheduleTool, createListSchedulesTool, createScheduleTool } from './scheduled-task-tools'
 import { collectRecentSendMessageAssessments, renderRecentSendMessageHumanLikenessXml } from './send-message-human-likeness'
@@ -82,6 +83,7 @@ export function createDriver(config: DriverConfig, deps: {
 	loadMessageAttachments: (chatId: string, messageId: string) => CanonicalAttachment[] | undefined
 	loadTurnResponses: (chatId: string, afterMs?: number) => Promise<TurnResponseV2[]>
 	logger: Logger
+	lookupMessageSenderId?: (chatId: string, messageId: string) => string | undefined
 	persistCompaction: (chatId: string, meta: CompactionSessionMeta) => void
 	persistProbeResponse: (chatId: string, probe: ProbeResponseV2) => Promise<void>
 	persistTurnResponse: (chatId: string, tr: TurnResponseV2) => Promise<void>
@@ -102,6 +104,7 @@ export function createDriver(config: DriverConfig, deps: {
 	const { logger } = deps
 	const log = logger.withContext('driver')
 	const chatIds = new Set(config.chatIds)
+	const reactionGuards = createReactionGuardRegistry()
 
 	// Runner cache: keyed by "apiBaseUrl::model" to reuse runners across chats
 	// sharing the same endpoint.
@@ -244,8 +247,13 @@ export function createDriver(config: DriverConfig, deps: {
 
 						const tools: CahciuaTool[] = [sendMessageTool]
 						const chatInteractions = deps.chatInteractions?.(chatId)
-						if (chatInteractions)
-							tools.push(...createChatInteractionTools(chatInteractions))
+						if (chatInteractions) {
+							tools.push(...createChatInteractionTools({
+								...chatInteractions,
+								lookupSenderId: messageId => deps.lookupMessageSenderId?.(chatId, messageId),
+								reactionGuard: reactionGuards.forChat(chatId),
+							}))
+						}
 						tools.push(createBashTool(deps.runtimeConfig, {
 							backgroundThresholdSec: chatConfig.tools.bash.backgroundThresholdSec,
 							sessionId: chatId,

@@ -37,7 +37,7 @@ Reminder: call `send_message` to speak (multiple calls = multiple messages). No 
 
 <template v-if="currentChannel === 'slack'">
 
-Slack behavior preference: use the lightest native action that fits. If a reaction is enough acknowledgement, call `react_to_message` instead of sending a text reply. Do not pair a simple reaction with a redundant "got it" message.
+Slack behavior preference: default to silence. Use `react_to_message` only when a reaction clearly fits and text would be overkill — not on every message, and at most one reaction per person's message burst. Never pair a reaction with a redundant text reply.
 
 Messages inside a thread carry `in-thread="true"` on the `<message>` element. Follow `<slack-reply-placement>` when present: it tells you whether `reply_to` is required and which message id to use. Omit `reply_to` only when you intentionally post a new top-level channel message for everyone.
 
@@ -76,7 +76,7 @@ You have already decided to act after deliberation. Make your tool calls now.
 
 You were mentioned — you will likely want to respond.
 <template v-if="currentChannel === 'slack'">
-If the mention only needs acknowledgement, a reaction may be the whole response. If it needs words, follow `<slack-reply-placement>` for `reply_to` when present.
+If the mention needs a substantive answer, use text and follow `<slack-reply-placement>` for `reply_to` when present. A reaction alone is rarely enough for @mentions — when unsure, reply in words or stay silent.
 </template>
 
 </template>

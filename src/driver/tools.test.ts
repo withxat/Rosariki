@@ -2,6 +2,7 @@ import type { Buffer } from 'node:buffer'
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { createReactionGuard } from './reaction-guard'
 import {
 	createChatInteractionTools,
 	createReadImageTool,
@@ -108,6 +109,37 @@ describe('createChatInteractionTools', () => {
 		}, { toolCallId: 'tc4' })
 		expect(readThread).toHaveBeenCalledWith('1710000000.123456', 10)
 		expect(threadResult.content).toBe(JSON.stringify({ ok: true, replies: [{ message_id: '1710000000.123456', text: 'hello' }] }))
+	})
+
+	it('skips duplicate add reactions to the same sender within the guard window', async () => {
+		const reactToMessage = vi.fn(async () => {})
+		const guard = createReactionGuard('chat1')
+		const tools = createChatInteractionTools({
+			deleteMessage: async () => {},
+			lookupSenderId: () => 'slack:U1',
+			reactionGuard: guard,
+			reactToMessage,
+			readThread: async () => [],
+			updateMessage: async () => ({ messageId: '1710000000.123456' }),
+		})
+
+		await tools.find(t => t.function.name === 'react_to_message')!.execute({
+			message_id: '100',
+			operation: 'add',
+			reaction: 'eyes',
+		}, { toolCallId: 'tc1' })
+		expect(reactToMessage).toHaveBeenCalledTimes(1)
+
+		const second = await tools.find(t => t.function.name === 'react_to_message')!.execute({
+			message_id: '101',
+			operation: 'add',
+			reaction: 'thumbsup',
+		}, { toolCallId: 'tc2' })
+		expect(second).toMatchObject({
+			content: expect.stringContaining('"skipped":true'),
+			requiresFollowUp: false,
+		})
+		expect(reactToMessage).toHaveBeenCalledTimes(1)
 	})
 })
 

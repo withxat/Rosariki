@@ -10,6 +10,7 @@ import type {
 	ToolResult as IRToolResult,
 	ToolCallPart,
 } from '../unified-api/types'
+import type { ReactionGuard } from './reaction-guard'
 
 import { execFile } from 'node:child_process'
 
@@ -127,6 +128,8 @@ export function createSendMessageTool(send: (text: string, replyTo?: string, att
 
 export interface ChatInteractionDeps {
 	deleteMessage: (messageId: string) => Promise<void>
+	lookupSenderId?: (messageId: string) => string | undefined
+	reactionGuard?: ReactionGuard
 	reactToMessage: (messageId: string, reaction: string, operation: 'add' | 'remove') => Promise<void>
 	readThread: (messageId: string, limit?: number) => Promise<unknown>
 	updateMessage: (messageId: string, text: string) => Promise<{ messageId: string }>
@@ -135,11 +138,26 @@ export interface ChatInteractionDeps {
 export function createChatInteractionTools(deps: ChatInteractionDeps): CahciuaTool[] {
 	return [
 		createTool({
-			description: 'Add or remove a reaction on a Slack message.',
+			description: 'Add or remove an emoji reaction on a Slack message. Use sparingly — at most one reaction per person\'s message burst. Prefer silence when unsure.',
 			execute: async (input) => {
 				const { message_id, operation, reaction } = input as { message_id: string, operation: 'add' | 'remove', reaction: string }
+
+				if (operation === 'add' && deps.reactionGuard) {
+					const senderId = deps.lookupSenderId?.(message_id)
+					const gate = deps.reactionGuard.checkAdd(senderId, message_id)
+					if (!gate.allowed) {
+						return {
+							content: JSON.stringify({ ok: false, reason: gate.reason, skipped: true }),
+							requiresFollowUp: false,
+						}
+					}
+					await deps.reactToMessage(message_id, reaction, operation)
+					deps.reactionGuard.recordAdd(senderId, message_id)
+					return { content: JSON.stringify({ ok: true }), requiresFollowUp: false }
+				}
+
 				await deps.reactToMessage(message_id, reaction, operation)
-				return { content: JSON.stringify({ ok: true }), requiresFollowUp: true }
+				return { content: JSON.stringify({ ok: true }), requiresFollowUp: operation !== 'remove' }
 			},
 			name: 'react_to_message',
 			parameters: {

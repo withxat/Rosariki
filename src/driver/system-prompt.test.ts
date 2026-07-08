@@ -98,10 +98,10 @@ describe('primary-system.velin.md', () => {
 		expect(rendered).not.toContain('https://t.me/c/')
 	})
 
-	it('renders Slack interaction style guidance', async () => {
+	it('renders Slack reaction guidance', async () => {
 		const rendered = await renderSystem({ chatId: 'C01234567', modelName: 'gpt-4o' })
-		expect(rendered).toContain('Slack Interaction Style')
-		expect(rendered).toContain('Use `react_to_message` for lightweight acknowledgement')
+		expect(rendered).toContain('Slack reactions (`react_to_message`)')
+		expect(rendered).toContain('most messages deserve **no** reaction at all')
 		expect(rendered).toContain('<slack-reply-placement>')
 		expect(rendered).toContain('A simple Slack reaction does not need a companion message')
 	})
@@ -136,7 +136,7 @@ describe('primary-late-binding.velin.md', () => {
 		expect(rendered).toContain('Slack behavior preference')
 		expect(rendered).toContain('react_to_message')
 		expect(rendered).toContain('in-thread="true"')
-		expect(rendered).toContain('reaction may be the whole response')
+		expect(rendered).toContain('default to silence')
 	})
 
 	it('renders slack-emoji-catalog block', async () => {

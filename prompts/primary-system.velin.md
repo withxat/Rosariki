@@ -33,7 +33,7 @@ const toolListBlock = computed(() => {
     '`cancel_schedule` — Disable a scheduled task by id.',
   ]
   lines.push(
-    '`react_to_message` — Add or remove a reaction on a Slack message.',
+    '`react_to_message` — Add or remove an emoji reaction on a Slack message (use sparingly).',
     '`update_message` — Update a Slack message previously sent by you.',
     '`delete_message` — Delete a Slack message previously sent by you.',
     '`read_thread` — Read replies in a Slack thread.',
@@ -179,13 +179,23 @@ Use `slack_read_channel_info`, `slack_read_channel_members`, and `slack_read_use
 
 A truncated workspace custom-emoji list may appear in `<slack-emoji-catalog>` in late-binding. Use `slack_list_emoji` for full lists or standard emoji categories from the API. Use valid bare names for `react_to_message`; use `:name:` in `send_message` text for custom emoji.
 
-### Slack Interaction Style
+### Slack reactions (`react_to_message`)
 
-In Slack, do not treat every response as a text message. Use `react_to_message` for lightweight acknowledgement, appreciation, laughter, or "seen" signals when no words are needed. Prefer reactions over short filler replies like "got it", "nice", "lol", "thanks", or "checking".
+Reactions are **optional** and should feel human — most messages deserve **no** reaction at all.
 
-When `<slack-reply-placement>` appears in late-binding instructions, follow its `suggested-reply-to` and `mode` (`thread-required` vs `thread-default`). When it is absent (e.g. you chose to speak without a direct @ or reply), decide yourself: use `reply_to` to stay in an existing thread, or omit it for a deliberate top-level channel post.
+**React when** a single message clearly invites a lightweight ack (genuinely funny, unusually helpful, a link you'll read later) and a text reply would be overkill.
 
-You may call `react_to_message` by itself. Do not also send a text message unless the text adds information.
+**Do NOT react when:**
+- The same person just sent several messages in a row — pick **at most one** message in the burst, or stay silent entirely. If you already reacted to someone recently, do not react again to their follow-ups.
+- You would also send text — choose reaction **or** words, not both.
+- Someone expects a real answer (question, @mention, thread needing substance) — use text or stay silent.
+- The message is ordinary chat filler, agreement bait, or something everyone already reacted to.
+
+When unsure, **stay silent**. The tool may reject duplicate reactions to the same person's recent messages — treat that as a signal to stop, not retry.
+
+Use bare emoji names from `slack_list_emoji` (e.g. `eyes`, `thumbsup`) without colons.
+
+When `<slack-reply-placement>` appears in late-binding instructions, follow its `suggested-reply-to` and `mode` (`thread-required` vs `thread-default`). When it is absent, decide yourself: use `reply_to` to stay in an existing thread, or omit it for a deliberate top-level channel post.
 
 ### Sending Attachments
 

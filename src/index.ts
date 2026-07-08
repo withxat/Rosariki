@@ -10,7 +10,7 @@ import { createBackgroundTaskManager } from './background-task'
 import { shellTaskFactory } from './background-task/shell'
 import { getChatIds, loadConfig, resolveAgent, resolveBackgroundTasks, resolveChatConfig, resolveModel, resolveRuntime } from './config/config'
 import { setupLogger, useLogger } from './config/logger'
-import { createDatabase, loadCompaction, loadEvents, loadImageAltTextByHash, loadKnownChatIds, loadLastProbeTime, loadLatestMessageContent, loadMessageAttachments, loadTurnResponses, migrateV1ToV2, persistCompaction, persistEvent, persistImageAltText, persistProbeResponse, persistTurnResponse, runMigrations } from './db'
+import { createDatabase, loadCompaction, loadEventMessageSenderId, loadEvents, loadImageAltTextByHash, loadKnownChatIds, loadLastProbeTime, loadLatestMessageContent, loadMessageAttachments, loadTurnResponses, migrateV1ToV2, persistCompaction, persistEvent, persistImageAltText, persistProbeResponse, persistTurnResponse, runMigrations } from './db'
 import { createDriver } from './driver'
 import { computeThumbnailHash, createImageToTextResolver } from './media/image-to-text'
 import { createPipeline } from './pipeline'
@@ -257,6 +257,7 @@ async function main() {
 		loadMessageAttachments: (chatId, messageId) => loadMessageAttachments(db, chatId, messageId),
 		loadTurnResponses: (chatId, afterMs) => loadTurnResponses(db, chatId, afterMs),
 		logger,
+		lookupMessageSenderId: (chatId, messageId) => loadEventMessageSenderId(db, chatId, messageId),
 		persistCompaction: (chatId, meta) => persistCompaction(db, chatId, meta),
 		persistProbeResponse: (chatId, probe) => persistProbeResponse(db, chatId, probe),
 		persistTurnResponse: (chatId, tr) => persistTurnResponse(db, chatId, tr),

@@ -97,6 +97,24 @@ export function loadLatestMessageContent(db: DB, chatId: string, messageId: stri
 		.get()
 }
 
+export function loadEventMessageSenderId(db: DB, chatId: string, messageId: string): string | undefined {
+	const row = db.select({ sender: events.sender, senderId: events.senderId })
+		.from(events)
+		.where(and(
+			eq(events.chatId, chatId),
+			eq(events.messageId, messageId),
+		))
+		.orderBy(desc(events.id))
+		.limit(1)
+		.get()
+
+	if (!row)
+		return undefined
+	if (row.senderId)
+		return row.senderId
+	return row.sender?.id
+}
+
 function reconstructMessageEvent(row: EventRow): CanonicalMessageEvent {
 	const event: CanonicalMessageEvent = {
 		attachments: row.attachments ?? [],
