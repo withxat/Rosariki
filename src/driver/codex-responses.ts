@@ -4,11 +4,14 @@ import type {
 	ResponseOutputItem,
 	ResponseTool,
 } from './responses-types'
-import type { ThinkingConfig } from './types'
 
 import { arch, platform, release } from 'node:os'
 
 import { registerHttpSecret } from '../http'
+
+export interface ThinkingConfig {
+	effort?: string
+}
 
 const DEFAULT_CODEX_BASE_URL = 'https://chatgpt.com/backend-api'
 

@@ -142,7 +142,6 @@ export async function callLlm(config: LlmCallConfig, entries: ConversationEntry[
 			forceToolCall: config.forceToolCall,
 			label,
 			log: log!,
-			thinking: config.thinking,
 			timeoutSec: config.timeoutSec,
 			token: auth.accessToken,
 		})
